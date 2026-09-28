@@ -9,11 +9,15 @@ LDFLAGS := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.buildDate=$(BUILD_DATE)
 
-.PHONY: build check fmt test test-race vet clean
+.PHONY: build benchmark-dataset check fmt test test-race vet clean
 
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/ulpf
+
+benchmark-dataset:
+	test -n "$(OUT)" || { printf '%s\n' 'usage: make benchmark-dataset OUT=/new/output/path'; exit 2; }
+	go run ./cmd/ulpf-benchgen -out "$(OUT)"
 
 fmt:
 	@test -z "$$(gofmt -l .)" || { gofmt -d .; exit 1; }

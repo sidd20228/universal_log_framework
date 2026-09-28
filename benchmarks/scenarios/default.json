@@ -1,0 +1,25 @@
+{
+  "scenario_version": "ulpf-benchmark-scenario/1",
+  "name": "synthetic-mixed-v1",
+  "seed": 20260929,
+  "event_count": 100,
+  "max_event_bytes": 65536,
+  "mix": [
+    {"fixture_id": "generic-syslog-deny", "weight": 20},
+    {"fixture_id": "json-firewall-allow", "weight": 20},
+    {"fixture_id": "cef-deny-escaped-extension", "weight": 15},
+    {"fixture_id": "leef-deny-custom-delimiter", "weight": 10},
+    {"fixture_id": "key-value-firewall-deny", "weight": 10},
+    {"fixture_id": "json-ids-alert", "weight": 10},
+    {"fixture_id": "router-interface-down", "weight": 5},
+    {"fixture_id": "unknown-proprietary-text", "weight": 5},
+    {"fixture_id": "malformed-json-truncated-value", "weight": 5}
+  ],
+  "sizes": [
+    {"bytes": 256, "weight": 20},
+    {"bytes": 1024, "weight": 20},
+    {"bytes": 4096, "weight": 20},
+    {"bytes": 16384, "weight": 20},
+    {"bytes": 65536, "weight": 20}
+  ]
+}
