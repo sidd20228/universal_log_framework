@@ -1,0 +1,31 @@
+{
+  "manifest_version": "ulpf-parser-bundle/1",
+  "bundle_id": "path-traversal-test",
+  "version": "1.0.0",
+  "description": "A structurally complete manifest with an unsafe relative path.",
+  "license": "Apache-2.0",
+  "compatibility": {
+    "envelope_schema": "ulpf-envelope/1.0.0",
+    "minimum_engine_version": "0.1.0",
+    "ocsf_version": "1.9.0"
+  },
+  "parsers": [
+    {
+      "id": "unsafe-path",
+      "implementation": "builtin_json",
+      "config": "../parser.yaml"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid",
+    "invalid": "fixtures/invalid",
+    "expected": "expected"
+  },
+  "artifacts": [
+    {
+      "path": "parser.yaml",
+      "role": "parser_config",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

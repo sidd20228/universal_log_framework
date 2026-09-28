@@ -1,0 +1,31 @@
+{
+  "manifest_version": "ulpf-parser-bundle/1",
+  "bundle_id": "Lab Bundle",
+  "version": "latest",
+  "description": "Unsafe executable parser bundle.",
+  "license": "Apache-2.0",
+  "compatibility": {
+    "envelope_schema": "ulpf-envelope/2.0.0",
+    "minimum_engine_version": "main",
+    "ocsf_version": "1.8.0"
+  },
+  "parsers": [
+    {
+      "id": "unsafe-parser",
+      "implementation": "python",
+      "config": "../parser.py"
+    }
+  ],
+  "fixtures": {
+    "valid": "fixtures/valid",
+    "invalid": "fixtures/invalid",
+    "expected": "expected"
+  },
+  "artifacts": [
+    {
+      "path": "../parser.py",
+      "role": "parser_config",
+      "sha256": "deadbeef"
+    }
+  ]
+}

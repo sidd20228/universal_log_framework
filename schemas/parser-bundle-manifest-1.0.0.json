@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ulpf.local/parser-bundle-manifest-1.0.0.json",
+  "title": "ULPF parser bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "bundle_id",
+    "version",
+    "description",
+    "license",
+    "compatibility",
+    "parsers",
+    "artifacts",
+    "fixtures"
+  ],
+  "properties": {
+    "manifest_version": {
+      "const": "ulpf-parser-bundle/1"
+    },
+    "bundle_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "license": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-.+ ]{0,127}$"
+    },
+    "compatibility": {
+      "$ref": "#/$defs/compatibility"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "parsers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/parser"
+      }
+    },
+    "fingerprints": {
+      "$ref": "#/$defs/path"
+    },
+    "mappings": {
+      "$ref": "#/$defs/path"
+    },
+    "taxonomies": {
+      "$ref": "#/$defs/path"
+    },
+    "event_schema": {
+      "$ref": "#/$defs/path"
+    },
+    "fixtures": {
+      "$ref": "#/$defs/fixtures"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "signature": {
+      "$ref": "#/$defs/signature"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "envelope_schema",
+        "minimum_engine_version"
+      ],
+      "properties": {
+        "envelope_schema": {
+          "const": "ulpf-envelope/1.0.0"
+        },
+        "minimum_engine_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "maximum_engine_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "ocsf_version": {
+          "const": "1.9.0"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "official_documentation",
+            "synthetic",
+            "reviewed_capture"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "product": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "firmware_range": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "implementation",
+        "config"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "implementation": {
+          "enum": [
+            "builtin_syslog",
+            "builtin_json",
+            "builtin_xml",
+            "builtin_csv",
+            "builtin_cef",
+            "builtin_leef",
+            "builtin_kv",
+            "declarative_re2"
+          ]
+        },
+        "config": {
+          "$ref": "#/$defs/path"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -1000,
+          "maximum": 1000
+        }
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid",
+        "invalid",
+        "expected"
+      ],
+      "properties": {
+        "valid": {
+          "$ref": "#/$defs/path"
+        },
+        "invalid": {
+          "$ref": "#/$defs/path"
+        },
+        "expected": {
+          "$ref": "#/$defs/path"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "role",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "role": {
+          "enum": [
+            "fingerprints",
+            "parser_config",
+            "mappings",
+            "taxonomies",
+            "event_schema",
+            "valid_fixture",
+            "invalid_fixture",
+            "expected_output",
+            "documentation"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "key_id",
+        "file"
+      ],
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "cosign",
+            "minisign"
+          ]
+        },
+        "key_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "file": {
+          "$ref": "#/$defs/path"
+        }
+      }
+    }
+  }
+}

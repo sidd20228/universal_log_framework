@@ -1,0 +1,441 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ulpf.local/ulpf-config-1.0.0.json",
+  "title": "ULPF configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "config_version",
+    "listeners",
+    "processing",
+    "storage",
+    "retention",
+    "connectors"
+  ],
+  "properties": {
+    "config_version": {
+      "const": "ulpf-config/1"
+    },
+    "listeners": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/listener"
+      }
+    },
+    "source_profiles": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/source_profile"
+      }
+    },
+    "processing": {
+      "$ref": "#/$defs/processing"
+    },
+    "storage": {
+      "$ref": "#/$defs/storage"
+    },
+    "retention": {
+      "$ref": "#/$defs/retention"
+    },
+    "connectors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/connector"
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(?:ns|us|ms|s|m|h)$"
+    },
+    "secret_ref": {
+      "type": "string",
+      "pattern": "^(?:file|env):[A-Za-z0-9_./-]+$",
+      "maxLength": 512
+    },
+    "listener": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "address",
+        "max_event_bytes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "http",
+            "syslog_udp",
+            "syslog_tcp"
+          ]
+        },
+        "address": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 512
+        },
+        "max_event_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "max_batch_events": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "source_profile_by_cidr": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 64
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "framing": {
+          "enum": [
+            "octet_counting",
+            "delimiter",
+            "auto"
+          ]
+        },
+        "read_timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "auth_token_ref": {
+          "$ref": "#/$defs/secret_ref"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "syslog_tcp"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "framing"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "framing"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "tenant_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "device_type": {
+          "enum": [
+            "firewall",
+            "router",
+            "switch",
+            "ids",
+            "ips",
+            "proxy",
+            "vpn",
+            "unknown"
+          ]
+        },
+        "vendor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "product": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "bundle_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "bundle_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "bundle_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "dependentRequired": {
+        "bundle_id": [
+          "bundle_version",
+          "bundle_sha256"
+        ],
+        "bundle_version": [
+          "bundle_id",
+          "bundle_sha256"
+        ],
+        "bundle_sha256": [
+          "bundle_id",
+          "bundle_version"
+        ]
+      }
+    },
+    "processing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workers",
+        "parser_timeout",
+        "detection_threshold",
+        "ambiguity_margin"
+      ],
+      "properties": {
+        "workers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "parser_timeout": {
+          "$ref": "#/$defs/duration"
+        },
+        "detection_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "ambiguity_margin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_parse_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_root",
+        "sqlite_path",
+        "high_watermark_percent"
+      ],
+      "properties": {
+        "raw_root": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "sqlite_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "high_watermark_percent": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 95
+        },
+        "durability": {
+          "enum": [
+            "strict",
+            "balanced"
+          ]
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_days"
+      ],
+      "properties": {
+        "raw_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500
+        },
+        "normalized_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500
+        }
+      }
+    },
+    "connector": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/clickhouse_connector"
+        },
+        {
+          "$ref": "#/$defs/ndjson_connector"
+        },
+        {
+          "$ref": "#/$defs/http_connector"
+        }
+      ]
+    },
+    "connector_base": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "required"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "clickhouse_connector": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/connector_base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": true,
+            "kind": {
+              "const": "clickhouse"
+            },
+            "required": true,
+            "batch_size": true,
+            "endpoint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "database": {
+              "$ref": "#/$defs/identifier"
+            },
+            "username": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "password_ref": {
+              "$ref": "#/$defs/secret_ref"
+            }
+          },
+          "required": [
+            "endpoint",
+            "database"
+          ]
+        }
+      ]
+    },
+    "ndjson_connector": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/connector_base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": true,
+            "kind": {
+              "const": "ndjson"
+            },
+            "required": true,
+            "batch_size": true,
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      ]
+    },
+    "http_connector": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/connector_base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": true,
+            "kind": {
+              "const": "http"
+            },
+            "required": true,
+            "batch_size": true,
+            "endpoint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "auth_token_ref": {
+              "$ref": "#/$defs/secret_ref"
+            },
+            "timeout": {
+              "$ref": "#/$defs/duration"
+            }
+          },
+          "required": [
+            "endpoint",
+            "timeout"
+          ]
+        }
+      ]
+    }
+  }
+}

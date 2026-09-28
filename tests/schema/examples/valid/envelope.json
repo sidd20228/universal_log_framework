@@ -1,0 +1,102 @@
+{
+  "schema_version": "ulpf-envelope/1.0.0",
+  "receipt": {
+    "id": "0199a1f0-7c4a-7b2c-8e25-8b4627a1c001",
+    "tenant_id": "demo",
+    "received_at": "2026-09-29T10:20:30.123456Z",
+    "listener_id": "syslog-udp-5514",
+    "transport": "syslog_udp",
+    "peer": {
+      "ip": "192.0.2.10",
+      "port": 49152
+    },
+    "source_profile_id": "lab-firewall-a",
+    "framing": {
+      "mode": "datagram",
+      "complete": true,
+      "observed_bytes": 143
+    }
+  },
+  "raw": {
+    "ref": "raw/2026/09/29/0199a1f0-7c4a-7b2c-8e25-8b4627a1c001.bin.zst",
+    "sha256": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+    "size_bytes": 143,
+    "encoding_hint": "utf-8",
+    "compression": "zstd",
+    "available": true
+  },
+  "processing": {
+    "revision_id": "0199a1f0-81b2-7680-89c3-d5c53fe8e002",
+    "pipeline_version": "0.1.0",
+    "parser": {
+      "id": "generic-cef",
+      "version": "1.0.0",
+      "bundle_sha256": "69bbaae3d2cdf272a5a46abce701e0d07c584d1cb54043f1347e3d2b21d2c891"
+    },
+    "mapping_version": "network-security/1.0.0",
+    "status": "PARSED",
+    "confidence": 0.99,
+    "issues": [],
+    "timestamps": {
+      "started_at": "2026-09-29T10:20:30.130000Z",
+      "completed_at": "2026-09-29T10:20:30.132000Z"
+    }
+  },
+  "event": {
+    "class_uid": 4001,
+    "class_name": "Network Activity",
+    "activity_id": 6,
+    "activity": "Traffic",
+    "time": "2026-09-29T10:20:29Z",
+    "action": "deny",
+    "severity_id": 4,
+    "severity": "high",
+    "src_endpoint": {
+      "ip": "10.0.0.8",
+      "port": 51514
+    },
+    "dst_endpoint": {
+      "ip": "198.51.100.25",
+      "port": 443
+    },
+    "connection_info": {
+      "protocol_name": "tcp",
+      "protocol_num": 6
+    },
+    "device": {
+      "type": "firewall"
+    }
+  },
+  "parsed": {
+    "fields": {
+      "src": "10.0.0.8",
+      "dst": "198.51.100.25",
+      "act": "blocked"
+    },
+    "unmapped": {
+      "vendorCounter": "17"
+    }
+  },
+  "provenance": {
+    "event.action": {
+      "kind": "normalized",
+      "source_path": "act",
+      "rule_id": "action.blocked.deny",
+      "mapping_version": "network-security/1.0.0"
+    },
+    "event.src_endpoint.ip": {
+      "kind": "mapped",
+      "source_path": "src",
+      "rule_id": "src.ip",
+      "mapping_version": "network-security/1.0.0"
+    }
+  },
+  "quality": {
+    "score": 0.91,
+    "required_present": 6,
+    "required_total": 6
+  },
+  "correlation": {
+    "group_ids": []
+  }
+}

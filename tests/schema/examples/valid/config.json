@@ -1,0 +1,63 @@
+{
+  "config_version": "ulpf-config/1",
+  "listeners": [
+    {
+      "id": "syslog-udp-5514",
+      "kind": "syslog_udp",
+      "address": "0.0.0.0:5514",
+      "max_event_bytes": 65536,
+      "source_profile_by_cidr": {
+        "192.0.2.10/32": "lab-firewall-a"
+      }
+    },
+    {
+      "id": "syslog-tcp-6514",
+      "kind": "syslog_tcp",
+      "address": "0.0.0.0:6514",
+      "max_event_bytes": 1048576,
+      "framing": "auto",
+      "read_timeout": "30s"
+    }
+  ],
+  "source_profiles": [
+    {
+      "id": "lab-firewall-a",
+      "tenant_id": "demo",
+      "device_type": "firewall",
+      "vendor": "synthetic",
+      "product": "lab-firewall",
+      "bundle_id": "lab-network-security",
+      "bundle_version": "1.0.0",
+      "bundle_sha256": "69bbaae3d2cdf272a5a46abce701e0d07c584d1cb54043f1347e3d2b21d2c891"
+    }
+  ],
+  "processing": {
+    "workers": 8,
+    "parser_timeout": "100ms",
+    "detection_threshold": 0.8,
+    "ambiguity_margin": 0.1,
+    "max_parse_depth": 64
+  },
+  "storage": {
+    "raw_root": "/var/lib/ulpf/raw",
+    "sqlite_path": "/var/lib/ulpf/control.db",
+    "high_watermark_percent": 85,
+    "durability": "strict"
+  },
+  "retention": {
+    "raw_days": 7,
+    "normalized_days": 30
+  },
+  "connectors": [
+    {
+      "id": "normalized-clickhouse",
+      "kind": "clickhouse",
+      "required": true,
+      "batch_size": 1000,
+      "endpoint": "http://clickhouse:8123",
+      "database": "ulpf",
+      "username": "ulpf",
+      "password_ref": "file:/run/secrets/clickhouse-password"
+    }
+  ]
+}

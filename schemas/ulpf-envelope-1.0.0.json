@@ -1,0 +1,639 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ulpf.local/ulpf-envelope-1.0.0.json",
+  "title": "Universal Log Pre-processing Framework envelope",
+  "description": "A lossless occurrence envelope with an OCSF-aligned normalized event projection.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt",
+    "raw",
+    "processing"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "ulpf-envelope/1.0.0"
+    },
+    "receipt": {
+      "$ref": "#/$defs/receipt"
+    },
+    "raw": {
+      "$ref": "#/$defs/raw"
+    },
+    "processing": {
+      "$ref": "#/$defs/processing"
+    },
+    "event": {
+      "$ref": "#/$defs/event"
+    },
+    "parsed": {
+      "$ref": "#/$defs/parsed"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "quality": {
+      "$ref": "#/$defs/quality"
+    },
+    "correlation": {
+      "$ref": "#/$defs/correlation"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 40
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "received_at",
+        "listener_id",
+        "transport",
+        "framing"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "tenant_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "received_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "listener_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transport": {
+          "enum": [
+            "http",
+            "syslog_udp",
+            "syslog_tcp"
+          ]
+        },
+        "peer": {
+          "$ref": "#/$defs/peer"
+        },
+        "source_profile_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "framing": {
+          "$ref": "#/$defs/framing"
+        }
+      }
+    },
+    "peer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ip"
+      ],
+      "properties": {
+        "ip": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 45
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "framing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "complete",
+        "observed_bytes"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "datagram",
+            "octet_counting",
+            "delimiter",
+            "http_body",
+            "http_batch_item"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "observed_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncation_reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "complete": {
+                "const": true
+              }
+            },
+            "required": [
+              "complete"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "truncation_reason"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "truncation_reason"
+            ]
+          }
+        }
+      ]
+    },
+    "raw": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "sha256",
+        "size_bytes",
+        "compression",
+        "available"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!.*[\\r\\n]).+$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "encoding_hint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "compression": {
+          "enum": [
+            "none",
+            "zstd"
+          ]
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "expired_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": false
+              }
+            },
+            "required": [
+              "available"
+            ]
+          },
+          "then": {
+            "required": [
+              "expired_at"
+            ]
+          }
+        }
+      ]
+    },
+    "processing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision_id",
+        "pipeline_version",
+        "status",
+        "issues"
+      ],
+      "properties": {
+        "revision_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "pipeline_version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "parser": {
+          "$ref": "#/$defs/parser_identity"
+        },
+        "mapping_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "status": {
+          "enum": [
+            "PARSED",
+            "PARTIALLY_PARSED",
+            "UNPARSED",
+            "INVALID"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "maxItems": 1024
+        },
+        "timestamps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "started_at"
+          ],
+          "properties": {
+            "started_at": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "completed_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "PARSED",
+                  "PARTIALLY_PARSED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "parser"
+            ]
+          }
+        }
+      ]
+    },
+    "parser_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "bundle_sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+        },
+        "bundle_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "stage"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+        },
+        "stage": {
+          "enum": [
+            "detection",
+            "parsing",
+            "mapping",
+            "validation",
+            "enrichment",
+            "delivery"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "source_path": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class_uid",
+        "class_name"
+      ],
+      "properties": {
+        "class_uid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "class_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "activity_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "time": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "action": {
+          "enum": [
+            "allow",
+            "deny",
+            "observe",
+            "quarantine",
+            "reset",
+            "redirect",
+            "unknown"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "severity_id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "severity": {
+          "enum": [
+            "unknown",
+            "informational",
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "src_endpoint": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "dst_endpoint": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "connection_info": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol_name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9._-]{0,31}$"
+            },
+            "protocol_num": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            }
+          }
+        },
+        "device": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "enum": [
+                "firewall",
+                "router",
+                "switch",
+                "ids",
+                "ips",
+                "proxy",
+                "vpn",
+                "unknown"
+              ]
+            },
+            "hostname": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "vendor_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "product_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "ip": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 45
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "hostname": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "mac": {
+          "type": "string",
+          "minLength": 11,
+          "maxLength": 23
+        }
+      }
+    },
+    "parsed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "unmapped": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "duplicate_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "minProperties": 1
+    },
+    "provenance": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^event(?:\\.[A-Za-z][A-Za-z0-9_]*)+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/field_provenance"
+      }
+    },
+    "field_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "original",
+            "parsed",
+            "mapped",
+            "normalized",
+            "derived",
+            "enriched"
+          ]
+        },
+        "source_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "rule_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mapping_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score",
+        "required_present",
+        "required_total"
+      ],
+      "properties": {
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "required_present": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "required_total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group_ids"
+      ],
+      "properties": {
+        "group_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "maxItems": 128
+        }
+      }
+    }
+  }
+}

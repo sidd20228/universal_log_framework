@@ -1,0 +1,35 @@
+{
+  "config_version": "ulpf-config/1",
+  "listeners": [
+    {
+      "id": "syslog-tcp-6514",
+      "kind": "syslog_tcp",
+      "address": "0.0.0.0:6514",
+      "max_event_bytes": 0
+    }
+  ],
+  "processing": {
+    "workers": 0,
+    "parser_timeout": "immediately",
+    "detection_threshold": 1.2,
+    "ambiguity_margin": -0.1
+  },
+  "storage": {
+    "raw_root": "/var/lib/ulpf/raw",
+    "sqlite_path": "/var/lib/ulpf/control.db",
+    "high_watermark_percent": 101
+  },
+  "retention": {
+    "raw_days": 0
+  },
+  "connectors": [
+    {
+      "id": "normalized-clickhouse",
+      "kind": "clickhouse",
+      "required": true,
+      "endpoint": "http://clickhouse:8123",
+      "database": "ulpf",
+      "password": "plaintext-secret"
+    }
+  ]
+}

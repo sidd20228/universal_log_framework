@@ -1,0 +1,48 @@
+{
+  "manifest_version": "ulpf-parser-bundle/1",
+  "bundle_id": "lab-network-security",
+  "version": "1.0.0",
+  "description": "Synthetic firewall fixtures and deterministic network activity mappings.",
+  "license": "Apache-2.0",
+  "compatibility": {
+    "envelope_schema": "ulpf-envelope/1.0.0",
+    "minimum_engine_version": "0.1.0",
+    "ocsf_version": "1.9.0"
+  },
+  "source": {
+    "kind": "synthetic",
+    "reference": "docs/parser-authoring.md",
+    "product": "lab-firewall"
+  },
+  "parsers": [
+    {
+      "id": "lab-firewall-kv",
+      "implementation": "builtin_kv",
+      "config": "parser.yaml",
+      "priority": 100
+    }
+  ],
+  "fingerprints": "fingerprints.yaml",
+  "mappings": "mappings.yaml",
+  "taxonomies": "taxonomies.yaml",
+  "event_schema": "schema.json",
+  "fixtures": {
+    "valid": "fixtures/valid",
+    "invalid": "fixtures/invalid",
+    "expected": "expected"
+  },
+  "artifacts": [
+    {
+      "path": "parser.yaml",
+      "role": "parser_config",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "media_type": "application/yaml"
+    },
+    {
+      "path": "fixtures/valid/denied.log",
+      "role": "valid_fixture",
+      "sha256": "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+      "media_type": "text/plain"
+    }
+  ]
+}
