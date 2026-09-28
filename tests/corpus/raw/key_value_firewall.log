@@ -1,0 +1,1 @@
+time=2026-09-29T10:20:29Z type=traffic src=10.0.0.8 dst=198.51.100.25 sport=51514 dport=443 proto=tcp action=blocked device=firewall synthetic=true

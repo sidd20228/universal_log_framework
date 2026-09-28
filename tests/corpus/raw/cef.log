@@ -1,0 +1,1 @@
+CEF:0|Example|Synthetic Firewall|1.0|100|Traffic denied|7|src=10.0.0.8 dst=198.51.100.25 spt=51514 dpt=443 proto=TCP act=blocked msg=synthetic\=policy\\test

@@ -1,0 +1,1 @@
+LEEF:2.0|Example|Synthetic IPS|1.0|200|^|src=10.0.0.8^|dst=198.51.100.25^|srcPort=51514^|dstPort=443^|proto=TCP^|action=blocked^|sev=7

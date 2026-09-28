@@ -1,0 +1,1 @@
+<134>1 2026-09-29T10:20:29Z edge-fw labfw - TRAFFIC [net src="10.0.0.8" dst="198.51.100.25" spt="51514" dpt="443" proto="tcp" action="deny"] blocked
