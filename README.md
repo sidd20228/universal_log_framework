@@ -25,6 +25,8 @@ make build
 
 Configuration and runnable deployment instructions will be added as their tracked issues land. Do not use this repository as a production collector until the security, failure-recovery, and benchmark gates in the implementation plan are complete.
 
+Parser syntax, limits, preserved fields, and format references are documented in [Built-in syntax parsers](docs/PARSERS.md).
+
 ## Project status
 
 - [Day 7 Vertical Slice milestone](https://github.com/sidd20228/universal_log_framework/milestone/1)
