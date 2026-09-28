@@ -37,3 +37,11 @@ connector, err := ndjson.OpenFile("cold-export", "/var/lib/ulpf/export/events.nd
 ```
 
 An interrupted or ambiguous file write can be retried and therefore can produce duplicate lines. Consumers must use the immutable `revision_id` inside each envelope as the idempotency key. Raw event bytes are never added to an export record; only the raw reference and SHA-256 already present in the envelope are exported.
+
+## Durable retry, DLQ, and replay
+
+The delivery coordinator stores each connector/revision pair in SQLite before delivery. Claims use expiring leases, so a process that stops after claiming work does not lose the record; a later worker recovers it after the lease deadline. Retryable results use bounded exponential backoff. Permanent failures and exhausted retries enter a connector-specific dead-letter state with a bounded, control-character-free code and message.
+
+Dead-letter replay is explicit and scoped to one connector and revision. Replay resets that delivery's attempt counter while preserving the immutable export record. Enqueue is idempotent on `(connector_id, revision_id)`. Each connector advances independently, so one unavailable destination cannot mark another destination successful.
+
+`CoordinatorConfig` controls lease duration, batch size, retry limit, backoff bounds, and the in-process circuit breaker. The SQLite store uses WAL and `synchronous=FULL`; callers should place its database on durable local storage and back it up with the inbox state.
