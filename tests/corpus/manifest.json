@@ -1,0 +1,477 @@
+{
+  "manifest_version": "ulpf-synthetic-corpus/1.0.0",
+  "name": "ULPF synthetic perimeter-event corpus",
+  "description": "Deterministic synthetic fixtures for syntax parsing, conservative normalization, failure handling, raw-byte integrity, and occurrence identity.",
+  "synthetic": true,
+  "vendor_support_claim": "none",
+  "license": {
+    "spdx_id": "Apache-2.0",
+    "license_file": "../../LICENSE",
+    "notice_file": "NOTICE.md"
+  },
+  "provenance": [
+    {
+      "id": "ulpf-hand-authored-synthetic-v1",
+      "kind": "synthetic",
+      "creator": "ULPF project",
+      "method": "Hand-authored from the public ULPF implementation plan; no production or vendor sample was copied.",
+      "created_at": "2026-09-29",
+      "contains_real_events": false,
+      "contains_personal_data": false,
+      "contains_secrets": false,
+      "identifiers": "RFC 5737 documentation addresses, private addresses, and reserved example domains only"
+    }
+  ],
+  "review": {
+    "reviewed": true,
+    "reviewed_by": "ULPF implementation task T28",
+    "reviewed_at": "2026-09-29",
+    "method": "Manual provenance inspection plus deterministic hash, coverage, encoding, JSON-failure, and duplicate-occurrence verification"
+  },
+  "required_scenarios": [
+    "generic_syslog",
+    "json_firewall",
+    "json_ids",
+    "cef",
+    "leef",
+    "key_value_firewall",
+    "csv",
+    "xml",
+    "router_text",
+    "unknown_proprietary_text",
+    "malformed_json",
+    "duplicate_json_keys",
+    "invalid_utf8",
+    "byte_identical_repeated_occurrence"
+  ],
+  "fixtures": [
+    {
+      "id": "generic-syslog-deny",
+      "scenario": "generic_syslog",
+      "path": "raw/generic_syslog.log",
+      "media_type": "application/syslog",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-001",
+      "raw_size_bytes": 149,
+      "raw_sha256": "8d4d168916d50f5f2f88340c1319a55d9d27626cb3b71a1af25856961a9bab05",
+      "expected": {
+        "parser": {
+          "id": "generic-syslog",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.time": "2026-09-29T10:20:29Z",
+          "event.action": "deny",
+          "event.src_endpoint.ip": "10.0.0.8",
+          "event.src_endpoint.port": 51514,
+          "event.dst_endpoint.ip": "198.51.100.25",
+          "event.dst_endpoint.port": 443,
+          "event.connection_info.protocol_name": "tcp"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "json-firewall-allow",
+      "scenario": "json_firewall",
+      "path": "raw/json_firewall.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-002",
+      "raw_size_bytes": 252,
+      "raw_sha256": "9aaf15a078fe0d21dfb1d71315c456fff0f6e4afd80436a22700cbba537b8efb",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.time": "2026-09-29T10:20:30Z",
+          "event.action": "allow",
+          "event.src_endpoint.ip": "10.0.0.9",
+          "event.src_endpoint.port": 53000,
+          "event.dst_endpoint.ip": "203.0.113.10",
+          "event.dst_endpoint.port": 53,
+          "event.connection_info.protocol_name": "udp",
+          "event.device.type": "firewall"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "json-ids-alert",
+      "scenario": "json_ids",
+      "path": "raw/json_ids.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-003",
+      "raw_size_bytes": 257,
+      "raw_sha256": "9cef5be47ca56ed0cdd47259bbc5ff84b408a66c0dce7811b736fdc07cc9eadd",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 2004,
+          "event.class_name": "Detection Finding",
+          "event.time": "2026-09-29T10:22:00Z",
+          "event.severity_id": 2,
+          "event.finding.signature": "Synthetic TLS Policy Alert",
+          "event.finding.signature_id": 900001,
+          "event.src_endpoint.ip": "10.0.0.8",
+          "event.src_endpoint.port": 51514,
+          "event.dst_endpoint.ip": "198.51.100.25",
+          "event.dst_endpoint.port": 443,
+          "event.connection_info.protocol_name": "tcp",
+          "event.device.type": "ids"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "cef-deny-escaped-extension",
+      "scenario": "cef",
+      "path": "raw/cef.log",
+      "media_type": "text/plain",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-004",
+      "raw_size_bytes": 157,
+      "raw_sha256": "acb5d9524609c9c693d62567fececeb2ce454fab1381f551be27c383faf8c927",
+      "expected": {
+        "parser": {
+          "id": "generic-cef",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.action": "deny",
+          "event.severity_id": 4,
+          "event.src_endpoint.ip": "10.0.0.8",
+          "event.src_endpoint.port": 51514,
+          "event.dst_endpoint.ip": "198.51.100.25",
+          "event.dst_endpoint.port": 443,
+          "event.connection_info.protocol_name": "tcp"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "leef-deny-custom-delimiter",
+      "scenario": "leef",
+      "path": "raw/leef.log",
+      "media_type": "text/plain",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-005",
+      "raw_size_bytes": 135,
+      "raw_sha256": "862457b481a437fa00f54fb860267a22aa9d462450f385df9a1939d47e228cbf",
+      "expected": {
+        "parser": {
+          "id": "generic-leef",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.action": "deny",
+          "event.severity_id": 4,
+          "event.src_endpoint.ip": "10.0.0.8",
+          "event.src_endpoint.port": 51514,
+          "event.dst_endpoint.ip": "198.51.100.25",
+          "event.dst_endpoint.port": 443,
+          "event.connection_info.protocol_name": "tcp"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "key-value-firewall-deny",
+      "scenario": "key_value_firewall",
+      "path": "raw/key_value_firewall.log",
+      "media_type": "text/plain",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-006",
+      "raw_size_bytes": 148,
+      "raw_sha256": "66e733409bf8c0f91512e5f826f8270bb8dae160556c2f8bdf8c12ddf48e7de1",
+      "expected": {
+        "parser": {
+          "id": "generic-kv",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.time": "2026-09-29T10:20:29Z",
+          "event.action": "deny",
+          "event.src_endpoint.ip": "10.0.0.8",
+          "event.src_endpoint.port": 51514,
+          "event.dst_endpoint.ip": "198.51.100.25",
+          "event.dst_endpoint.port": 443,
+          "event.connection_info.protocol_name": "tcp",
+          "event.device.type": "firewall"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "csv-network-record",
+      "scenario": "csv",
+      "path": "raw/csv.csv",
+      "media_type": "text/csv",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-007",
+      "raw_size_bytes": 171,
+      "raw_sha256": "0c62c89b90bfb895b9a79d3805cdb7d19a18f5e3cb80fc86ae70007c840c6afb",
+      "expected": {
+        "parser": {
+          "id": "generic-csv",
+          "version": "1.0.0"
+        },
+        "status": "PARTIALLY_PARSED",
+        "canonical_fields": {},
+        "issue_codes": [
+          "SEMANTIC_MAPPING_UNAVAILABLE"
+        ]
+      }
+    },
+    {
+      "id": "xml-network-record",
+      "scenario": "xml",
+      "path": "raw/xml.xml",
+      "media_type": "application/xml",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-008",
+      "raw_size_bytes": 281,
+      "raw_sha256": "acdb906c68df789956ccf6fd5d7f2a0842ded4852f103e26d8f2d9aa1d56afd2",
+      "expected": {
+        "parser": {
+          "id": "generic-xml",
+          "version": "1.0.0"
+        },
+        "status": "PARTIALLY_PARSED",
+        "canonical_fields": {},
+        "issue_codes": [
+          "SEMANTIC_MAPPING_UNAVAILABLE"
+        ]
+      }
+    },
+    {
+      "id": "router-interface-down",
+      "scenario": "router_text",
+      "path": "raw/router_text.log",
+      "media_type": "text/plain",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-009",
+      "raw_size_bytes": 107,
+      "raw_sha256": "d0aa8a959c1ccbf2aca8c94724384584f35e53600dee695e8ce757d6b122098a",
+      "expected": {
+        "parser": {
+          "id": "lab-router-text",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 2,
+          "event.activity": "Close",
+          "event.time": "2026-09-29T10:21:00Z",
+          "event.device.type": "router",
+          "event.device.hostname": "lab-router-1",
+          "event.extensions.ulpf.interface": "xe-0/0/1",
+          "event.extensions.ulpf.reason": "loss-of-signal"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "unknown-proprietary-text",
+      "scenario": "unknown_proprietary_text",
+      "path": "raw/unknown_proprietary.bin",
+      "media_type": "application/octet-stream",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-010",
+      "raw_size_bytes": 50,
+      "raw_sha256": "a1ec705e21caf0f4100058a933a73003088207059cf3b108b0e9c76dc28d65cd",
+      "expected": {
+        "parser": null,
+        "status": "UNPARSED",
+        "canonical_fields": {},
+        "issue_codes": [
+          "NO_PARSER_MATCH"
+        ]
+      }
+    },
+    {
+      "id": "malformed-json-truncated-value",
+      "scenario": "malformed_json",
+      "path": "raw/malformed_json.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-011",
+      "raw_size_bytes": 32,
+      "raw_sha256": "bb1cce1dad6d139a972cd28e403017f93bc7afed771c93367cd336d640d8fdfa",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "INVALID",
+        "canonical_fields": {},
+        "issue_codes": [
+          "JSON_SYNTAX_ERROR"
+        ]
+      }
+    },
+    {
+      "id": "duplicate-json-action-key",
+      "scenario": "duplicate_json_keys",
+      "path": "raw/duplicate_keys.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-012",
+      "raw_size_bytes": 107,
+      "raw_sha256": "85b7835f6050fc2cab430f89de800ece17add2941495a176b5bb80bb6c3b0354",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "INVALID",
+        "canonical_fields": {},
+        "issue_codes": [
+          "JSON_DUPLICATE_KEY"
+        ]
+      }
+    },
+    {
+      "id": "invalid-utf8-octets",
+      "scenario": "invalid_utf8",
+      "path": "raw/invalid_utf8.bin",
+      "media_type": "application/octet-stream",
+      "content_encoding": "binary",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-013",
+      "raw_size_bytes": 35,
+      "raw_sha256": "3710e7eb67afc2cab6f0c4dfab232cd38c91122b73532a28b6973b9a84437995",
+      "expected": {
+        "parser": null,
+        "status": "UNPARSED",
+        "canonical_fields": {},
+        "issue_codes": [
+          "INVALID_UTF8"
+        ]
+      }
+    },
+    {
+      "id": "repeated-json-occurrence-a",
+      "scenario": "byte_identical_repeated_occurrence",
+      "path": "raw/repeated_occurrence_a.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-014-a",
+      "duplicate_group": "repeated-network-event-001",
+      "preserve_as_distinct_occurrence": true,
+      "raw_size_bytes": 138,
+      "raw_sha256": "95581cf6fe423fd2584f99db31dda21bc277666fb034047d4ee0a14e1547795d",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.time": "2026-09-29T10:30:00Z",
+          "event.action": "deny",
+          "event.src_endpoint.ip": "10.0.0.10",
+          "event.dst_endpoint.ip": "203.0.113.20"
+        },
+        "issue_codes": []
+      }
+    },
+    {
+      "id": "repeated-json-occurrence-b",
+      "scenario": "byte_identical_repeated_occurrence",
+      "path": "raw/repeated_occurrence_b.json",
+      "media_type": "application/json",
+      "content_encoding": "utf-8",
+      "synthetic": true,
+      "provenance_id": "ulpf-hand-authored-synthetic-v1",
+      "occurrence_id": "synthetic-occurrence-014-b",
+      "duplicate_group": "repeated-network-event-001",
+      "preserve_as_distinct_occurrence": true,
+      "raw_size_bytes": 138,
+      "raw_sha256": "95581cf6fe423fd2584f99db31dda21bc277666fb034047d4ee0a14e1547795d",
+      "expected": {
+        "parser": {
+          "id": "generic-json",
+          "version": "1.0.0"
+        },
+        "status": "PARSED",
+        "canonical_fields": {
+          "event.class_uid": 4001,
+          "event.class_name": "Network Activity",
+          "event.activity_id": 6,
+          "event.activity": "Traffic",
+          "event.time": "2026-09-29T10:30:00Z",
+          "event.action": "deny",
+          "event.src_endpoint.ip": "10.0.0.10",
+          "event.dst_endpoint.ip": "203.0.113.20"
+        },
+        "issue_codes": []
+      }
+    }
+  ]
+}

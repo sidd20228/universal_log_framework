@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:22:00Z","event_type":"alert","src_ip":"10.0.0.8","src_port":51514,"dest_ip":"198.51.100.25","dest_port":443,"protocol":"tcp","alert":{"signature":"Synthetic TLS Policy Alert","signature_id":900001,"severity":2},"synthetic":true}

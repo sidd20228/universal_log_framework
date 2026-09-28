@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<event synthetic="true">
+  <timestamp>2026-09-29T10:20:29Z</timestamp>
+  <type>traffic</type>
+  <source ip="10.0.0.8" port="51514" />
+  <destination ip="198.51.100.25" port="443" />
+  <protocol>tcp</protocol>
+  <action>deny</action>
+</event>

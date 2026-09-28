@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-09-29T10:20:30Z",
+  "event_type": "traffic",
+  "src_ip": "10.0.0.9",
+  "src_port": 53000,
+  "dst_ip": "203.0.113.10",
+  "dst_port": 53,
+  "protocol": "udp",
+  "action": "allow",
+  "device_type": "firewall",
+  "synthetic": true
+}

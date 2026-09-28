@@ -1,0 +1,2 @@
+timestamp,event_type,src_ip,src_port,dst_ip,dst_port,protocol,action,note
+2026-09-29T10:20:29Z,traffic,10.0.0.8,51514,198.51.100.25,443,tcp,deny,"synthetic, quoted field"
