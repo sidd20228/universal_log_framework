@@ -9,7 +9,7 @@ LDFLAGS := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.buildDate=$(BUILD_DATE)
 
-.PHONY: build benchmark-dataset check fmt test test-race vet clean
+.PHONY: build benchmark-dataset check fmt fuzz security-smoke test test-race vet clean
 
 build:
 	mkdir -p bin
@@ -30,6 +30,12 @@ test:
 
 test-race:
 	go test -race ./...
+
+security-smoke:
+	go test ./internal/auth ./internal/ingress ./internal/interpret/re2parser ./internal/registry ./internal/securitytest -count=1 -run '^(Fuzz|TestSecurity|TestPermissionMatrix|TestLoaderRejectsTraversalAndSymlinks|TestPathologicalPatternCompletesWithoutBacktracking|TestHTTPRejectsOversizeWithoutDurableWrites|TestUDPListenerRejectsOversizeAndAccountsForTruncation)'
+
+fuzz:
+	FUZZTIME="$(or $(FUZZTIME),10s)" ./scripts/run-fuzz.sh
 
 check: fmt vet test
 

@@ -23,5 +23,7 @@ jobs:
         run: make vet
       - name: Test
         run: make test
+      - name: Security corpus smoke
+        run: make security-smoke
       - name: Build
         run: make build
