@@ -15,4 +15,5 @@ tmp/
 *.db-wal
 *.log
 !tests/corpus/raw/*.log
+!internal/interpret/syslog/testdata/*.log
 var/
