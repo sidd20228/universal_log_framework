@@ -23,4 +23,9 @@ Exercise the checksum verifier's tamper-detection path without modifying the ven
 
 The validation script uses the `jsonschema` command from Python jsonschema 4.x and selects `Draft202012Validator` explicitly. Set `JSONSCHEMA_BIN` when the executable has a different name or path.
 
+The envelope checks include the golden output produced by `internal/envelope`.
+Cross-field invariants that JSON Schema cannot express, including complete
+canonical-field provenance and deterministic quality counts, are enforced by
+`envelope.Envelope.Validate`.
+
 JSON Schema cannot express cross-document constraints such as unique listener IDs, artifact-path completeness, checksum equality, or whether a source profile references an installed bundle. The configuration and bundle activation paths must perform those semantic checks after schema validation.

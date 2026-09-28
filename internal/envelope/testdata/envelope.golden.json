@@ -1,0 +1,54 @@
+{
+  "schema_version": "ulpf-envelope/1.0.0",
+  "receipt": {
+    "id": "0199a1f0-7c4a-7b2c-8e25-8b4627a1c001",
+    "tenant_id": "demo",
+    "received_at": "2026-09-29T10:20:30.123456Z",
+    "listener_id": "syslog-udp-5514",
+    "transport": "syslog_udp",
+    "peer": {"ip": "192.0.2.10", "port": 49152},
+    "framing": {"mode": "datagram", "complete": true, "observed_bytes": 143}
+  },
+  "raw": {
+    "ref": "raw/2026/09/29/receipt.bin",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size_bytes": 143,
+    "encoding_hint": "utf-8",
+    "compression": "none",
+    "available": true
+  },
+  "processing": {
+    "revision_id": "0199a1f0-81b2-7680-89c3-d5c53fe8e002",
+    "pipeline_version": "0.1.0",
+    "parser": {"id": "generic-json", "version": "1.0.0"},
+    "mapping_version": "golden/1.0.0",
+    "status": "PARTIALLY_PARSED",
+    "issues": [
+      {"code": "SOURCE_PROFILE_MISSING", "stage": "enrichment", "severity": "WARNING", "retryable": false, "message": "source profile was not configured"},
+      {"code": "PARSER_ESCAPE_INVALID", "stage": "parsing", "severity": "WARNING", "retryable": false, "message": "invalid escape was preserved", "offset": 4},
+      {"code": "MAPPING_CONVERSION_FAILED", "stage": "mapping", "severity": "WARNING", "retryable": false, "message": "rule severity to event.severity_id: text is not an integer", "source_path": "fields.severity"}
+    ],
+    "timestamps": {"started_at": "2026-09-29T10:20:30.124456Z", "completed_at": "2026-09-29T10:20:30.125456Z"}
+  },
+  "event": {
+    "action": "deny",
+    "class_name": "Network Activity",
+    "class_uid": 4001,
+    "src_endpoint": {"ip": "10.0.0.8", "port": 51514}
+  },
+  "parsed": {
+    "format": "json",
+    "fields": {"action": "blocked", "binary": "AP8=", "sport": 51514, "src": "10.0.0.8", "type": "traffic", "vendorCounter": 17},
+    "unmapped": {"fields.binary": "AP8=", "fields.vendorCounter": 17},
+    "unmatched": "3q0="
+  },
+  "provenance": {
+    "event.action": {"kind": "normalized", "source_path": "fields.action", "rule_id": "action", "mapping_version": "golden/1.0.0"},
+    "event.class_name": {"kind": "normalized", "source_path": "fields.type", "rule_id": "class-name", "mapping_version": "golden/1.0.0"},
+    "event.class_uid": {"kind": "normalized", "source_path": "fields.type", "rule_id": "class-uid", "mapping_version": "golden/1.0.0"},
+    "event.src_endpoint.ip": {"kind": "normalized", "source_path": "fields.src", "rule_id": "source-ip", "mapping_version": "golden/1.0.0"},
+    "event.src_endpoint.port": {"kind": "normalized", "source_path": "fields.sport", "rule_id": "source-port", "mapping_version": "golden/1.0.0"}
+  },
+  "quality": {"score": 0.8888888888888888, "required_present": 3, "required_total": 4, "provenance_present": 5, "provenance_total": 5},
+  "correlation": {"group_ids": []}
+}

@@ -133,9 +133,8 @@
           "enum": [
             "datagram",
             "octet_counting",
-            "delimiter",
-            "http_body",
-            "http_batch_item"
+            "non_transparent",
+            "http_octets"
           ]
         },
         "complete": {
@@ -270,7 +269,8 @@
             "PARSED",
             "PARTIALLY_PARSED",
             "UNPARSED",
-            "INVALID"
+            "INVALID",
+            "ERROR"
           ]
         },
         "confidence": {
@@ -329,8 +329,7 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "version",
-        "bundle_sha256"
+        "version"
       ],
       "properties": {
         "id": {
@@ -367,6 +366,13 @@
             "delivery"
           ]
         },
+        "severity": {
+          "enum": [
+            "INFO",
+            "WARNING",
+            "ERROR"
+          ]
+        },
         "message": {
           "type": "string",
           "maxLength": 1024
@@ -374,6 +380,10 @@
         "source_path": {
           "type": "string",
           "maxLength": 512
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
         },
         "retryable": {
           "type": "boolean"
@@ -494,6 +504,9 @@
             }
           }
         },
+        "finding": {
+          "$ref": "#/$defs/finding"
+        },
         "extensions": {
           "type": "object",
           "propertyNames": {
@@ -530,10 +543,31 @@
         }
       }
     },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "signature": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "signature_id": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "parsed": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "format": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
         "fields": {
           "type": "object",
           "additionalProperties": true
@@ -541,6 +575,10 @@
         "unmapped": {
           "type": "object",
           "additionalProperties": true
+        },
+        "unmatched": {
+          "type": "string",
+          "contentEncoding": "base64"
         },
         "duplicate_fields": {
           "type": "array",
@@ -591,6 +629,9 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "taxonomy": {
+          "$ref": "#/$defs/identifier"
         }
       }
     },
@@ -613,6 +654,14 @@
           "minimum": 0
         },
         "required_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provenance_present": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provenance_total": {
           "type": "integer",
           "minimum": 0
         }

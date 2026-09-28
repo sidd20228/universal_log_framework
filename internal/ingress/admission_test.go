@@ -45,10 +45,11 @@ func (store *memoryEvidence) Write(ctx context.Context, receiptID string, _ time
 	store.values[receiptID] = bytes.Clone(body)
 	store.mu.Unlock()
 	return model.RawReference{
-		Ref:       "raw/" + receiptID + ".bin",
-		SHA256:    fmt.Sprintf("%x", digest[:]),
-		SizeBytes: uint64(len(body)),
-		Available: true,
+		Ref:         "raw/" + receiptID + ".bin",
+		SHA256:      fmt.Sprintf("%x", digest[:]),
+		SizeBytes:   uint64(len(body)),
+		Compression: model.CompressionNone,
+		Available:   true,
 	}, nil
 }
 

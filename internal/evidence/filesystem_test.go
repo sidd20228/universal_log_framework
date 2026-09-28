@@ -31,7 +31,7 @@ func TestFilesystemStorePreservesExactBytes(t *testing.T) {
 	if reference.SHA256 != fmt.Sprintf("%x", sha256.Sum256(payload)) {
 		t.Fatalf("SHA256 = %q, want digest of original bytes", reference.SHA256)
 	}
-	if reference.Compression != "" || !reference.Available {
+	if reference.Compression != model.CompressionNone || !reference.Available {
 		t.Fatalf("reference = %+v, want uncompressed available evidence", reference)
 	}
 

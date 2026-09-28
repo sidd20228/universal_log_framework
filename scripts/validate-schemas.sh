@@ -28,6 +28,9 @@ validate_invalid() {
 }
 
 validate_valid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/tests/schema/examples/valid/envelope.json"
+validate_valid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/internal/envelope/testdata/envelope.golden.json"
+validate_valid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/tests/schema/examples/valid/envelope-error-http.json"
+validate_valid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/tests/schema/examples/valid/envelope-error-tcp.json"
 validate_invalid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/tests/schema/examples/invalid/envelope.json"
 validate_invalid "$repo_root/schemas/ulpf-envelope-1.0.0.json" "$repo_root/tests/schema/examples/invalid/envelope-missing-raw-integrity.json"
 

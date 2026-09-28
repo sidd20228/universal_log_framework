@@ -118,10 +118,11 @@ func (store *Filesystem) Write(ctx context.Context, receiptID string, receivedAt
 	committed = true
 
 	return model.RawReference{
-		Ref:       filepath.ToSlash(relativePath),
-		SHA256:    fmt.Sprintf("%x", digest.Sum(nil)),
-		SizeBytes: uint64(size),
-		Available: true,
+		Ref:         filepath.ToSlash(relativePath),
+		SHA256:      fmt.Sprintf("%x", digest.Sum(nil)),
+		SizeBytes:   uint64(size),
+		Compression: model.CompressionNone,
+		Available:   true,
 	}, nil
 }
 

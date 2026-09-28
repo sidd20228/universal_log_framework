@@ -21,10 +21,11 @@ func validReceipt() Receipt {
 			ObservedBytes: 143,
 		},
 		Raw: RawReference{
-			Ref:       "raw/2026/09/29/0199.bin.zst",
-			SHA256:    strings.Repeat("a", 64),
-			SizeBytes: 143,
-			Available: true,
+			Ref:         "raw/2026/09/29/0199.bin",
+			SHA256:      strings.Repeat("a", 64),
+			SizeBytes:   143,
+			Compression: CompressionNone,
+			Available:   true,
 		},
 		State: StateAccepted,
 	}
@@ -50,6 +51,14 @@ func TestReceiptAllowsExpiredRawEvidenceAfterProcessing(t *testing.T) {
 	receipt.Raw.Available = false
 	if err := receipt.Validate(); err != nil {
 		t.Fatalf("retained receipt metadata rejected after raw expiry: %v", err)
+	}
+}
+
+func TestReceiptRejectsUnspecifiedRawCompression(t *testing.T) {
+	receipt := validReceipt()
+	receipt.Raw.Compression = ""
+	if err := receipt.Validate(); err == nil {
+		t.Fatal("receipt with unspecified raw compression was accepted")
 	}
 }
 

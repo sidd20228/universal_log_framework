@@ -46,6 +46,11 @@ type RawReference struct {
 	Available    bool   `json:"available"`
 }
 
+const (
+	CompressionNone = "none"
+	CompressionZstd = "zstd"
+)
+
 type Receipt struct {
 	ID              string       `json:"id"`
 	TenantID        string       `json:"tenant_id"`
@@ -93,6 +98,9 @@ func (receipt Receipt) Validate() error {
 	}
 	if receipt.Raw.SizeBytes != receipt.Framing.ObservedBytes {
 		problems = append(problems, errors.New("raw size must equal framing observed bytes"))
+	}
+	if receipt.Raw.Compression != CompressionNone && receipt.Raw.Compression != CompressionZstd {
+		problems = append(problems, errors.New("raw compression must be none or zstd"))
 	}
 	if !receipt.State.Valid() {
 		problems = append(problems, fmt.Errorf("invalid receipt state %q", receipt.State))
