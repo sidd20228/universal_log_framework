@@ -27,3 +27,13 @@ Run the opt-in idempotency integration test against a disposable ClickHouse inst
 ULPF_TEST_CLICKHOUSE_URL=http://127.0.0.1:8123 \
 go test ./internal/deliver/clickhouse -run TestClickHouseIntegrationIdempotentBatch -count=1
 ```
+
+## NDJSON
+
+The NDJSON connector writes one compact canonical envelope per line to an `io.Writer`, stdout, or a mode-`0600` append-only file. It validates and compacts the entire bounded batch before writing, serializes concurrent deliveries, and calls `fsync` for file destinations before reporting success. File paths that already resolve to symbolic links are rejected.
+
+```go
+connector, err := ndjson.OpenFile("cold-export", "/var/lib/ulpf/export/events.ndjson", 10000, 16<<20)
+```
+
+An interrupted or ambiguous file write can be retried and therefore can produce duplicate lines. Consumers must use the immutable `revision_id` inside each envelope as the idempotency key. Raw event bytes are never added to an export record; only the raw reference and SHA-256 already present in the envelope are exported.
