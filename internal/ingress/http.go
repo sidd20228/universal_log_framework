@@ -80,6 +80,8 @@ func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		ListenerID:      handler.config.ListenerID,
 		SourceProfileID: handler.config.SourceProfileID,
 		Peer:            requestPeer(request.RemoteAddr),
+		Transport:       model.TransportHTTP,
+		FramingMode:     model.FramingHTTPOctets,
 	})
 	if err != nil {
 		handler.writeAdmissionError(writer, err, requestID)

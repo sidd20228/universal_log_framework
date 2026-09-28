@@ -29,6 +29,8 @@ type AdmissionRequest struct {
 	SourceProfileID string
 	Peer            *model.Peer
 	EncodingHint    string
+	Transport       model.Transport
+	FramingMode     model.FramingMode
 }
 
 type AdmissionResult struct {
@@ -118,6 +120,10 @@ func (coordinator *Coordinator) Admit(ctx context.Context, request AdmissionRequ
 	if request.Payload == nil || strings.TrimSpace(request.TenantID) == "" || strings.TrimSpace(request.ListenerID) == "" {
 		return AdmissionResult{}, ErrInvalidRequest
 	}
+	transport, framingMode, err := admissionTransport(request.Transport, request.FramingMode)
+	if err != nil {
+		return AdmissionResult{}, err
+	}
 	receivedAt := coordinator.now().UTC()
 	receiptID, err := coordinator.ids.New(receivedAt)
 	if err != nil {
@@ -149,11 +155,11 @@ func (coordinator *Coordinator) Admit(ctx context.Context, request AdmissionRequ
 		TenantID:        request.TenantID,
 		ReceivedAt:      receivedAt,
 		ListenerID:      request.ListenerID,
-		Transport:       model.TransportHTTP,
+		Transport:       transport,
 		Peer:            clonePeer(request.Peer),
 		SourceProfileID: request.SourceProfileID,
 		Framing: model.Framing{
-			Mode:          model.FramingHTTPOctets,
+			Mode:          framingMode,
 			Complete:      true,
 			ObservedBytes: raw.SizeBytes,
 		},
@@ -167,6 +173,39 @@ func (coordinator *Coordinator) Admit(ctx context.Context, request AdmissionRequ
 		return AdmissionResult{}, &AdmissionError{Kind: ErrInboxWrite, Orphan: orphan, Cause: err}
 	}
 	return AdmissionResult{Receipt: receipt}, nil
+}
+
+func admissionTransport(transport model.Transport, framingMode model.FramingMode) (model.Transport, model.FramingMode, error) {
+	if transport == "" {
+		transport = model.TransportHTTP
+	}
+	if framingMode == "" {
+		switch transport {
+		case model.TransportHTTP:
+			framingMode = model.FramingHTTPOctets
+		case model.TransportSyslogUDP:
+			framingMode = model.FramingDatagram
+		default:
+			return "", "", ErrInvalidRequest
+		}
+	}
+	switch transport {
+	case model.TransportHTTP:
+		if framingMode != model.FramingHTTPOctets {
+			return "", "", ErrInvalidRequest
+		}
+	case model.TransportSyslogUDP:
+		if framingMode != model.FramingDatagram {
+			return "", "", ErrInvalidRequest
+		}
+	case model.TransportSyslogTCP:
+		if framingMode != model.FramingOctetCounting && framingMode != model.FramingNonTransparent {
+			return "", "", ErrInvalidRequest
+		}
+	default:
+		return "", "", ErrInvalidRequest
+	}
+	return transport, framingMode, nil
 }
 
 func clonePeer(peer *model.Peer) *model.Peer {

@@ -27,6 +27,7 @@ Configuration and runnable deployment instructions will be added as their tracke
 
 Parser syntax, limits, preserved fields, and format references are documented in [Built-in syntax parsers](docs/PARSERS.md).
 The MVP permission model and scope matrix are documented in [Scoped token authorization](docs/AUTHORIZATION.md).
+Listener framing and transport durability behavior are documented in [Event transports and framing](docs/TRANSPORTS.md).
 
 ## Project status
 
