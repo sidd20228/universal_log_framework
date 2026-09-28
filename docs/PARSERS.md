@@ -4,6 +4,34 @@ ULPF parsers interpret bounded event bytes without changing the raw evidence. A 
 
 All built-in parsers implement `interpret.SyntaxParser`. Zero-valued limits receive safe defaults. Callers can lower the input, field, depth, and token limits for a listener or source profile. Parser results preserve duplicate values where the source format permits them.
 
+## JSON
+
+The `generic-json` parser accepts exactly one UTF-8 JSON value. It uses token parsing instead of decoding directly into a map, so duplicate member names are detected recursively before any value can be overwritten. Objects become `fields` directly; a top-level array or scalar is stored under `fields.$`. Nested objects and arrays retain their structure, booleans and null remain typed, and numbers remain `json.Number` strings so large integers and decimal spellings do not lose precision.
+
+The parser rejects trailing non-whitespace data and reports stable codes for invalid UTF-8, syntax, duplicate keys, cancellation, and byte, field, depth, or token limits. Invalid input does not expose a partially trusted field tree.
+
+## XML
+
+The `generic-xml` parser accepts one well-formed UTF-8 XML document. Element and attribute names use `{namespace-uri}local-name` when a namespace is present. Attributes live under `@attributes`, mixed text under `#text`, and repeated child elements are retained in arrival order as arrays. Text-only leaves remain strings.
+
+DTD and standalone entity declarations are rejected with `XML_DTD_FORBIDDEN` or `XML_ENTITY_FORBIDDEN`; external or declared entity expansion is never enabled. The parser also rejects a second root element, invalid UTF-8, duplicate attributes, malformed markup, and byte, field, depth, or token limit violations.
+
+## CSV
+
+The `generic-csv` parser treats the first record as a required unique header and maps subsequent records into `fields.records`. It follows Go's strict RFC 4180-style CSV reader behavior, including escaped quotes, commas, and newlines inside quoted fields. Empty or duplicate column names and inconsistent record widths are invalid. Column count uses the field limit; total records and cells use the token limit.
+
+```text
+format: csv
+fields.columns: ordered header strings
+fields.records: ordered objects containing string values
+```
+
+## Key-value
+
+The `generic-kv` parser accepts whitespace-separated `key=value` pairs with unquoted, single-quoted, or double-quoted values. Quoted values support `\\`, escaped quotes, and `\n`, `\r`, and `\t`. Unknown escapes remain literal and produce an issue.
+
+Duplicate keys are never overwritten: the first duplicate converts the value into an ordered string array, later values append to it, and each duplicate produces `KV_DUPLICATE_KEY`. A malformed suffix after valid pairs returns `PARTIALLY_PARSED` and copies the uninterpreted suffix into `document.unmatched`; a malformed first token is `INVALID`.
+
 ## CEF
 
 The `generic-cef` parser accepts CEF records with or without a Syslog transport prefix. It requires the seven CEF header fields, decodes escaped header pipes and backslashes, and decodes extension `\\=`, `\\\\`, `\\n`, and `\\r` sequences. Unknown or truncated escapes are preserved and reported. Extension values can contain spaces; the next field begins only at a valid `key=` boundary. Duplicate extension keys are retained in arrival order.
