@@ -45,3 +45,9 @@ The delivery coordinator stores each connector/revision pair in SQLite before de
 Dead-letter replay is explicit and scoped to one connector and revision. Replay resets that delivery's attempt counter while preserving the immutable export record. Enqueue is idempotent on `(connector_id, revision_id)`. Each connector advances independently, so one unavailable destination cannot mark another destination successful.
 
 `CoordinatorConfig` controls lease duration, batch size, retry limit, backoff bounds, and the in-process circuit breaker. The SQLite store uses WAL and `synchronous=FULL`; callers should place its database on durable local storage and back it up with the inbox state.
+
+## Generic HTTP
+
+The generic HTTP connector posts a bounded JSON batch to an HTTPS endpoint. It supports a bearer token and approved static headers, rejects credentials in URLs and header injection, and sends a deterministic `Idempotency-Key` derived from the connector ID and sorted revision IDs. Plain HTTP requires an explicit opt-in for a trusted local or test network.
+
+Responses with status 429, 408, or 5xx are retryable. Other non-2xx responses are permanent until configuration or destination behavior changes. Response text stored in delivery state is size-bounded and stripped of control characters. Credentials and raw evidence bytes are excluded from request errors and response state.
