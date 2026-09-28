@@ -26,6 +26,7 @@ make build
 Configuration and runnable deployment instructions will be added as their tracked issues land. Do not use this repository as a production collector until the security, failure-recovery, and benchmark gates in the implementation plan are complete.
 
 Parser syntax, limits, preserved fields, and format references are documented in [Built-in syntax parsers](docs/PARSERS.md).
+The MVP permission model and scope matrix are documented in [Scoped token authorization](docs/AUTHORIZATION.md).
 
 ## Project status
 
