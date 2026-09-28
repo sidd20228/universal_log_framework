@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/model"
+	sqlitemigrations "github.com/sidd20228/universal_log_framework/migrations/sqlite"
 )
 
 func openTestStore(t *testing.T) (*SQLiteStore, string) {
@@ -73,12 +74,22 @@ func testRevision(id, receiptID, bundleDigest string, completedAt time.Time) mod
 
 func TestMigrationsAreIdempotentAndDurabilityIsConfigured(t *testing.T) {
 	store, path := openTestStore(t)
+	entries, err := sqlitemigrations.Files.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedMigrations := 0
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			expectedMigrations++
+		}
+	}
 	var count int
 	if err := store.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Fatalf("migration count = %d, want 1", count)
+	if count != expectedMigrations {
+		t.Fatalf("migration count = %d, want %d", count, expectedMigrations)
 	}
 	var journalMode string
 	var synchronous int
@@ -102,8 +113,8 @@ func TestMigrationsAreIdempotentAndDurabilityIsConfigured(t *testing.T) {
 	if err := reopened.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Fatalf("migration count after reopen = %d, want 1", count)
+	if count != expectedMigrations {
+		t.Fatalf("migration count after reopen = %d, want %d", count, expectedMigrations)
 	}
 }
 
