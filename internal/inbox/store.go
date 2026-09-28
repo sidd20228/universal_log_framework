@@ -5,14 +5,16 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 )
 
 var (
-	ErrNotFound  = errors.New("inbox record not found")
-	ErrNoWork    = errors.New("inbox has no claimable work")
-	ErrConflict  = errors.New("inbox state conflict")
-	ErrLeaseLost = errors.New("inbox lease is no longer owned")
+	ErrNotFound            = errors.New("inbox record not found")
+	ErrNoWork              = errors.New("inbox has no claimable work")
+	ErrConflict            = errors.New("inbox state conflict")
+	ErrLeaseLost           = errors.New("inbox lease is no longer owned")
+	ErrEnvelopeUnavailable = errors.New("revision envelope is unavailable")
 )
 
 type Record struct {
@@ -32,6 +34,8 @@ type Store interface {
 	ReleaseLease(context.Context, string, string, model.ReceiptState, string) error
 	RecoverExpiredLeases(context.Context, time.Time) (int64, error)
 	CommitRevision(context.Context, model.Revision, string) (model.Revision, bool, error)
+	CommitEnvelope(context.Context, model.Revision, envelope.Envelope, string, model.ReceiptState, string) (model.Revision, bool, error)
 	GetRevision(context.Context, string) (model.Revision, error)
+	GetEnvelope(context.Context, string) (envelope.Envelope, error)
 	Close() error
 }

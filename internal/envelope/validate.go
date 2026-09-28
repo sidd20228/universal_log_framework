@@ -196,8 +196,15 @@ func validateCanonicalEvent(event map[string]any) error {
 		}
 	}
 	if value, exists := event["time"]; exists {
-		timestamp, ok := value.(time.Time)
-		if !ok || timestamp.IsZero() {
+		valid := false
+		switch timestamp := value.(type) {
+		case time.Time:
+			valid = !timestamp.IsZero()
+		case string:
+			parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+			valid = err == nil && !parsed.IsZero()
+		}
+		if !valid {
 			return errors.New("event.time must be a non-zero time.Time")
 		}
 	}
@@ -457,6 +464,11 @@ func integerInRange(value any, minimum, maximum int64) bool {
 			return false
 		}
 		integer = parsed
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) || math.Trunc(typed) != typed || typed < math.MinInt64 || typed > math.MaxInt64 {
+			return false
+		}
+		integer = int64(typed)
 	default:
 		return false
 	}

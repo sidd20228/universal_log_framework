@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	envelopepkg "github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 	sqlitemigrations "github.com/sidd20228/universal_log_framework/migrations/sqlite"
 	_ "modernc.org/sqlite"
@@ -300,6 +301,41 @@ WHERE state = ? AND lease_until_ns <= ?`,
 }
 
 func (store *SQLiteStore) CommitRevision(ctx context.Context, revision model.Revision, owner string) (model.Revision, bool, error) {
+	return store.commitRevision(ctx, revision, nil, owner, model.StateRevisionCommitted, "")
+}
+
+func (store *SQLiteStore) CommitEnvelope(
+	ctx context.Context,
+	revision model.Revision,
+	envelope envelopepkg.Envelope,
+	owner string,
+	finalState model.ReceiptState,
+	lastErrorCode string,
+) (model.Revision, bool, error) {
+	if err := envelope.Validate(); err != nil {
+		return model.Revision{}, false, fmt.Errorf("validate envelope: %w", err)
+	}
+	if err := validateEnvelopeRevision(revision, envelope); err != nil {
+		return model.Revision{}, false, err
+	}
+	if finalState != model.StateRevisionCommitted && finalState != model.StateDeadLetter {
+		return model.Revision{}, false, errors.New("envelope final state must be REVISION_COMMITTED or DEAD_LETTER")
+	}
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return model.Revision{}, false, fmt.Errorf("encode envelope: %w", err)
+	}
+	return store.commitRevision(ctx, revision, body, owner, finalState, lastErrorCode)
+}
+
+func (store *SQLiteStore) commitRevision(
+	ctx context.Context,
+	revision model.Revision,
+	envelopeJSON []byte,
+	owner string,
+	finalState model.ReceiptState,
+	lastErrorCode string,
+) (model.Revision, bool, error) {
 	if err := revision.Validate(); err != nil {
 		return model.Revision{}, false, fmt.Errorf("validate revision: %w", err)
 	}
@@ -327,12 +363,12 @@ func (store *SQLiteStore) CommitRevision(ctx context.Context, revision model.Rev
 		return model.Revision{}, false, fmt.Errorf("encode revision: %w", err)
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO revisions (
-revision_id, receipt_id, pipeline_version, bundle_sha256, revision_json, created_at_ns
-) SELECT ?, ?, ?, ?, ?, ?
+revision_id, receipt_id, pipeline_version, bundle_sha256, revision_json, envelope_json, created_at_ns
+) SELECT ?, ?, ?, ?, ?, NULLIF(?, ''), ?
 WHERE EXISTS (
   SELECT 1 FROM receipts
   WHERE receipt_id = ? AND state = ? AND lease_owner = ? AND lease_until_ns > ?
-)`, revision.ID, revision.ReceiptID, revision.PipelineVersion, bundleDigest, string(body), revision.CompletedAt.UnixNano(),
+)`, revision.ID, revision.ReceiptID, revision.PipelineVersion, bundleDigest, string(body), string(envelopeJSON), revision.CompletedAt.UnixNano(),
 		revision.ReceiptID, model.StateProcessing, owner, time.Now().UTC().UnixNano())
 	if err != nil {
 		return model.Revision{}, false, fmt.Errorf("insert revision %s: %w", revision.ID, err)
@@ -341,9 +377,9 @@ WHERE EXISTS (
 		return model.Revision{}, false, err
 	}
 	result, err = tx.ExecContext(ctx, `UPDATE receipts
-SET state = ?, lease_owner = NULL, lease_until_ns = NULL, last_error_code = NULL
+SET state = ?, lease_owner = NULL, lease_until_ns = NULL, last_error_code = NULLIF(?, '')
 WHERE receipt_id = ? AND state = ? AND lease_owner = ?`,
-		model.StateRevisionCommitted, revision.ReceiptID, model.StateProcessing, owner)
+		finalState, lastErrorCode, revision.ReceiptID, model.StateProcessing, owner)
 	if err != nil {
 		return model.Revision{}, false, fmt.Errorf("advance receipt after revision: %w", err)
 	}
@@ -356,8 +392,69 @@ WHERE receipt_id = ? AND state = ? AND lease_owner = ?`,
 	return revision, true, nil
 }
 
+func validateEnvelopeRevision(revision model.Revision, envelope envelopepkg.Envelope) error {
+	if envelope.Receipt.ID != revision.ReceiptID || envelope.SchemaVersion != revision.SchemaVersion ||
+		envelope.Processing.RevisionID != revision.ID || envelope.Processing.PipelineVersion != revision.PipelineVersion ||
+		envelope.Processing.MappingVersion != revision.MappingVersion || envelope.Processing.Status != revision.Status {
+		return errors.New("envelope identity does not match revision")
+	}
+	if (envelope.Processing.Parser == nil) != (revision.Parser == nil) {
+		return errors.New("envelope parser identity does not match revision")
+	}
+	if revision.Parser != nil && *envelope.Processing.Parser != *revision.Parser {
+		return errors.New("envelope parser identity does not match revision")
+	}
+	return nil
+}
+
 func (store *SQLiteStore) GetRevision(ctx context.Context, revisionID string) (model.Revision, error) {
 	return scanRevision(store.db.QueryRowContext(ctx, "SELECT revision_json FROM revisions WHERE revision_id = ?", revisionID))
+}
+
+func (store *SQLiteStore) GetEnvelope(ctx context.Context, revisionID string) (envelopepkg.Envelope, error) {
+	var body sql.NullString
+	if err := store.db.QueryRowContext(ctx, "SELECT envelope_json FROM revisions WHERE revision_id = ?", revisionID).Scan(&body); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return envelopepkg.Envelope{}, ErrNotFound
+		}
+		return envelopepkg.Envelope{}, fmt.Errorf("read revision envelope: %w", err)
+	}
+	if !body.Valid || body.String == "" {
+		return envelopepkg.Envelope{}, ErrEnvelopeUnavailable
+	}
+	var stored envelopepkg.Envelope
+	if err := json.Unmarshal([]byte(body.String), &stored); err != nil {
+		return envelopepkg.Envelope{}, fmt.Errorf("decode revision envelope: %w", err)
+	}
+	if err := stored.Validate(); err != nil {
+		return envelopepkg.Envelope{}, fmt.Errorf("validate stored revision envelope: %w", err)
+	}
+	return stored, nil
+}
+
+// ListRevisions returns the immutable revisions for one receipt in commit
+// order. An unknown receipt and a receipt with no revisions both return an
+// empty slice; callers that need to distinguish those cases must GetReceipt
+// first.
+func (store *SQLiteStore) ListRevisions(ctx context.Context, receiptID string) ([]model.Revision, error) {
+	rows, err := store.db.QueryContext(ctx, `SELECT revision_json FROM revisions
+WHERE receipt_id = ? ORDER BY created_at_ns, revision_id`, receiptID)
+	if err != nil {
+		return nil, fmt.Errorf("list revisions for receipt %s: %w", receiptID, err)
+	}
+	defer rows.Close()
+	revisions := make([]model.Revision, 0)
+	for rows.Next() {
+		revision, err := scanRevision(rows)
+		if err != nil {
+			return nil, err
+		}
+		revisions = append(revisions, revision)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate revisions for receipt %s: %w", receiptID, err)
+	}
+	return revisions, nil
 }
 
 type rowScanner interface {
