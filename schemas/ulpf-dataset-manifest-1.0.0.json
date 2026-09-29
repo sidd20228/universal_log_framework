@@ -68,7 +68,7 @@
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["received_from", "received_to", "statuses"],
+      "required": ["received_from", "received_to", "statuses", "partial_event_policy"],
       "properties": {
         "received_from": {"type": "string", "format": "date-time"},
         "received_to": {"type": "string", "format": "date-time"},
@@ -77,7 +77,8 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": {"enum": ["PARSED", "PARTIALLY_PARSED", "UNPARSED", "INVALID", "ERROR"]}
-        }
+        },
+        "partial_event_policy": {"enum": ["include", "exclude", "reject"]}
       }
     },
     "revisions": {

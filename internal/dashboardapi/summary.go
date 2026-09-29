@@ -85,6 +85,27 @@ type RecentEvent struct {
 	EventURL        string    `json:"event_url"`
 }
 
+// OriginSummary is a bounded per-runtime slice used by the dashboard to group
+// and filter a federated snapshot without exposing peer connection details.
+type OriginSummary struct {
+	PeerID             string           `json:"peer_id"`
+	EnvironmentID      string           `json:"environment_id"`
+	InstanceID         string           `json:"instance_id"`
+	Available          bool             `json:"available"`
+	Stale              bool             `json:"stale"`
+	Retained           bool             `json:"retained"`
+	GeneratedAt        time.Time        `json:"generated_at,omitempty"`
+	LastSeenAt         time.Time        `json:"last_seen_at,omitempty"`
+	Totals             Totals           `json:"totals"`
+	AcceptedTotal      int64            `json:"accepted_total"`
+	CommittedTotal     int64            `json:"committed_total"`
+	ReceiptStateCounts map[string]int64 `json:"receipt_state_counts"`
+	StatusCounts       map[string]int64 `json:"status_counts"`
+	Pipeline           []PipelineStage  `json:"pipeline"`
+	Activity           []ActivityBucket `json:"activity"`
+	RecentEvents       []RecentEvent    `json:"recent_events"`
+}
+
 type Summary struct {
 	GeneratedAt        time.Time        `json:"generated_at"`
 	TenantID           string           `json:"tenant_id"`
@@ -100,6 +121,7 @@ type Summary struct {
 	Activity           []ActivityBucket `json:"activity"`
 	RecentEvents       []RecentEvent    `json:"recent_events"`
 	Nodes              []NodeStatus     `json:"nodes,omitempty"`
+	Origins            []OriginSummary  `json:"origins,omitempty"`
 }
 
 // SQLiteReader reads aggregate metadata from the runtime database. Aggregate

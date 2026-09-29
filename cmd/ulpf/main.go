@@ -10,15 +10,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/sidd20228/universal_log_framework/internal/analytics"
 	"github.com/sidd20228/universal_log_framework/internal/bundlecompile"
 	"github.com/sidd20228/universal_log_framework/internal/control"
 	"github.com/sidd20228/universal_log_framework/internal/dashboardapi"
 	"github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/inbox"
+	"github.com/sidd20228/universal_log_framework/internal/model"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
 	"github.com/sidd20228/universal_log_framework/internal/server"
 )
@@ -55,6 +58,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runHealthcheck(args[1:], stderr)
 	case "bundle":
 		return runBundle(args[1:], stdout, stderr)
+	case "dataset":
+		return runDataset(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return 0
@@ -63,6 +68,84 @@ func run(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runDataset(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "export" {
+		fmt.Fprintln(stderr, "dataset requires export")
+		return 2
+	}
+	flags := flag.NewFlagSet("dataset export", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	sqlitePath := flags.String("sqlite", "", "SQLite state path")
+	tenantID := flags.String("tenant", "", "tenant identifier")
+	featureSetPath := flags.String("feature-set", "", "feature-set JSON path")
+	outputRoot := flags.String("output", "", "immutable dataset output root")
+	fromText := flags.String("from", "", "inclusive received-at bound (RFC3339)")
+	toText := flags.String("to", "", "exclusive received-at bound (RFC3339)")
+	statusesText := flags.String("statuses", "PARSED,PARTIALLY_PARSED", "comma-separated interpretation statuses")
+	partialPolicy := flags.String("partial-policy", string(analytics.PartialInclude), "include, exclude, or reject partially parsed revisions")
+	seed := flags.String("split-seed", "default-v1", "deterministic split seed")
+	trainBP := flags.Int("train-bp", 8000, "training split basis points")
+	validationBP := flags.Int("validation-bp", 1000, "validation split basis points")
+	testBP := flags.Int("test-bp", 1000, "test split basis points")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || *sqlitePath == "" || *tenantID == "" || *featureSetPath == "" || *outputRoot == "" || *fromText == "" || *toText == "" {
+		fmt.Fprintln(stderr, "dataset export requires --sqlite, --tenant, --feature-set, --output, --from, and --to")
+		return 2
+	}
+	from, err := time.Parse(time.RFC3339Nano, *fromText)
+	if err != nil {
+		fmt.Fprintln(stderr, "dataset export --from must be RFC3339")
+		return 2
+	}
+	to, err := time.Parse(time.RFC3339Nano, *toText)
+	if err != nil {
+		fmt.Fprintln(stderr, "dataset export --to must be RFC3339")
+		return 2
+	}
+	body, err := os.ReadFile(*featureSetPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "read feature set failed")
+		return 1
+	}
+	featureSet, err := analytics.LoadFeatureSet(body)
+	if err != nil {
+		fmt.Fprintf(stderr, "feature set invalid: %v\n", err)
+		return 1
+	}
+	statuses := make([]model.InterpretationStatus, 0)
+	for _, value := range strings.Split(*statusesText, ",") {
+		status := model.InterpretationStatus(strings.TrimSpace(value))
+		if !status.Valid() {
+			fmt.Fprintf(stderr, "dataset status %q is invalid\n", value)
+			return 2
+		}
+		statuses = append(statuses, status)
+	}
+	sort.Slice(statuses, func(left, right int) bool { return statuses[left] < statuses[right] })
+	store, err := inbox.OpenSQLite(context.Background(), *sqlitePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "open dataset source: %v\n", err)
+		return 1
+	}
+	defer store.Close()
+	result, err := analytics.ExportDataset(context.Background(), store, analytics.ExportRequest{
+		TenantID: *tenantID, FeatureSet: featureSet, OutputRoot: *outputRoot,
+		Selection: analytics.DatasetSelection{ReceivedFrom: from.UTC(), ReceivedTo: to.UTC(), Statuses: statuses, PartialEventPolicy: analytics.PartialEventPolicy(*partialPolicy)},
+		Split:     analytics.SplitPolicy{Algorithm: "sha256_revision_id_v1", Seed: *seed, TrainBasisPoints: *trainBP, ValidationBasisPoints: *validationBP, TestBasisPoints: *testBP},
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "dataset export failed: %v\n", err)
+		return 1
+	}
+	if err := json.NewEncoder(stdout).Encode(result); err != nil {
+		fmt.Fprintf(stderr, "write dataset result: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func runtimeBundleLoader() (*registry.Loader, error) {
@@ -424,5 +507,5 @@ func runValidateConfig(args []string, stdout, stderr io.Writer) int {
 
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: ulpf <command> [options]")
-	fmt.Fprintln(writer, "commands: version, validate-config, serve, healthcheck, bundle")
+	fmt.Fprintln(writer, "commands: version, validate-config, serve, healthcheck, bundle, dataset")
 }

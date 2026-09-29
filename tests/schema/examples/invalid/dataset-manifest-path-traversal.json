@@ -11,7 +11,8 @@
   "selection": {
     "received_from": "2026-09-29T00:00:00Z",
     "received_to": "2026-09-30T00:00:00Z",
-    "statuses": ["PARSED"]
+    "statuses": ["PARSED"],
+    "partial_event_policy": "include"
   },
   "revisions": {
     "count": 1,

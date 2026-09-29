@@ -7,13 +7,62 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/server"
 )
+
+func TestReadinessTracksRequiredConnectorHealth(t *testing.T) {
+	var healthy atomic.Bool
+	destination := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodHead && healthy.Load() {
+			writer.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writer.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer destination.Close()
+	root := t.TempDir()
+	service, err := server.New(context.Background(), server.Config{
+		SQLitePath: filepath.Join(root, "state", "ulpf.sqlite"), RawRoot: filepath.Join(root, "raw"),
+		TenantID: "demo", Token: testToken, Workers: 1,
+		Connectors: []server.ConnectorConfig{{ID: "required-http", Kind: "http", Required: true, Endpoint: destination.URL, Timeout: time.Second}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = service.Serve(ctx, listener) }()
+	baseURL := "http://" + listener.Addr().String()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		response, requestErr := http.Get(baseURL + "/health/ready")
+		if requestErr == nil {
+			response.Body.Close()
+			if response.StatusCode == http.StatusServiceUnavailable {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("required connector outage was not reflected in readiness")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	healthy.Store(true)
+	waitReady(t, baseURL)
+}
 
 func TestServiceCompilesActivatedReferenceBundleThroughHTTP(t *testing.T) {
 	root := t.TempDir()
@@ -234,6 +283,125 @@ func TestServiceAdmitsProcessesQueriesAndShutsDown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("graceful shutdown timed out")
+	}
+}
+
+func TestConnectorOperationsRequireAuthentication(t *testing.T) {
+	root := t.TempDir()
+	service, err := server.New(context.Background(), server.Config{
+		SQLitePath: filepath.Join(root, "state", "ulpf.sqlite"), RawRoot: filepath.Join(root, "raw"), TenantID: "demo", Token: testToken,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+
+	unauthorized := httptest.NewRecorder()
+	service.Handler().ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/api/v1/connectors/status?tenant_id=demo", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status=%d", unauthorized.Code)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/connectors/status?tenant_id=demo", nil)
+	request.Header.Set("Authorization", "Bearer "+testToken)
+	authorized := httptest.NewRecorder()
+	service.Handler().ServeHTTP(authorized, request)
+	if authorized.Code != http.StatusOK || !strings.Contains(authorized.Body.String(), `"connectors":[]`) {
+		t.Fatalf("authorized status=%d body=%s", authorized.Code, authorized.Body.String())
+	}
+}
+
+func TestRunningServiceExposesConnectorDLQStatusAndReplay(t *testing.T) {
+	sink := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		http.Error(writer, "rejected", http.StatusBadRequest)
+	}))
+	defer sink.Close()
+	root := t.TempDir()
+	service, err := server.New(context.Background(), server.Config{
+		SQLitePath: filepath.Join(root, "state", "ulpf.sqlite"), RawRoot: filepath.Join(root, "raw"), TenantID: "demo", Token: testToken,
+		Workers: 1, ProcessingTimeout: time.Second,
+		Connectors: []server.ConnectorConfig{{ID: "required-http", Kind: "http", Required: true, Endpoint: sink.URL, BatchSize: 10, Timeout: time.Second}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- service.Serve(ctx, listener) }()
+	baseURL := "http://" + listener.Addr().String()
+	waitReady(t, baseURL)
+
+	ingest, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/ingest", bytes.NewReader([]byte(`{"event_type":"traffic","action":"deny"}`)))
+	ingest.Header.Set("Authorization", "Bearer "+testToken)
+	ingest.Header.Set("Content-Type", "application/octet-stream")
+	ingestResponse, err := http.DefaultClient.Do(ingest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ingestResponse.Body.Close()
+	if ingestResponse.StatusCode != http.StatusAccepted {
+		t.Fatalf("ingest status=%d", ingestResponse.StatusCode)
+	}
+
+	var revisionID string
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		request, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/connectors/dlq?tenant_id=demo", nil)
+		request.Header.Set("Authorization", "Bearer "+testToken)
+		response, requestErr := http.DefaultClient.Do(request)
+		if requestErr == nil {
+			var page struct {
+				Items []struct {
+					RevisionID string `json:"revision_id"`
+					Required   bool   `json:"required"`
+				} `json:"items"`
+			}
+			decodeErr := json.NewDecoder(response.Body).Decode(&page)
+			response.Body.Close()
+			if response.StatusCode == http.StatusOK && decodeErr == nil && len(page.Items) == 1 && page.Items[0].Required {
+				revisionID = page.Items[0].RevisionID
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if revisionID == "" {
+		t.Fatal("required connector delivery did not enter the authenticated DLQ")
+	}
+	statusRequest, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/connectors/status?tenant_id=demo", nil)
+	statusRequest.Header.Set("Authorization", "Bearer "+testToken)
+	statusResponse, err := http.DefaultClient.Do(statusRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusBody, _ := io.ReadAll(statusResponse.Body)
+	statusResponse.Body.Close()
+	if statusResponse.StatusCode != http.StatusOK || !bytes.Contains(statusBody, []byte(`"DEAD_LETTER":1`)) {
+		t.Fatalf("status=%d body=%s", statusResponse.StatusCode, statusBody)
+	}
+	replayRequest, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/connectors/required-http/replay/"+revisionID+"?tenant_id=demo", nil)
+	replayRequest.Header.Set("Authorization", "Bearer "+testToken)
+	replayResponse, err := http.DefaultClient.Do(replayRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayResponse.Body.Close()
+	if replayResponse.StatusCode != http.StatusAccepted {
+		t.Fatalf("replay status=%d", replayResponse.StatusCode)
+	}
+	http.DefaultClient.CloseIdleConnections()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("service shutdown timed out")
 	}
 }
 

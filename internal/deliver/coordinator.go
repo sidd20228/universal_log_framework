@@ -27,6 +27,7 @@ const (
 
 type Item struct {
 	ConnectorID string
+	Required    bool
 	Record      ExportRecord
 	State       State
 	Attempts    int
@@ -35,6 +36,19 @@ type Item struct {
 	LeaseUntil  time.Time
 	LastCode    string
 	LastMessage string
+}
+
+// ConnectorTarget binds a connector to its delivery policy. Optional targets
+// are observable and replayable but do not prevent the receipt from becoming
+// delivered.
+type ConnectorTarget struct {
+	Connector Connector
+	Required  bool
+}
+
+type EnqueueTarget struct {
+	ConnectorID string
+	Required    bool
 }
 
 type Completion struct {
@@ -108,6 +122,37 @@ func (coordinator *Coordinator) Enqueue(ctx context.Context, connector Connector
 		return errors.New("connector is required")
 	}
 	return coordinator.store.Enqueue(ctx, connector.Descriptor().ID, records, now)
+}
+
+// EnqueueAll persists the complete connector policy for a revision in one
+// transaction. This prevents connector ordering from changing receipt state.
+func (coordinator *Coordinator) EnqueueAll(ctx context.Context, targets []ConnectorTarget, records []ExportRecord, now time.Time) error {
+	if len(targets) == 0 {
+		return errors.New("at least one connector target is required")
+	}
+	policyStore, ok := coordinator.store.(interface {
+		EnqueueAll(context.Context, []EnqueueTarget, []ExportRecord, time.Time) error
+	})
+	if !ok {
+		return errors.New("delivery state store does not support atomic connector policy")
+	}
+	values := make([]EnqueueTarget, len(targets))
+	seen := make(map[string]struct{}, len(targets))
+	for index, target := range targets {
+		if target.Connector == nil {
+			return errors.New("connector target is required")
+		}
+		connectorID := strings.TrimSpace(target.Connector.Descriptor().ID)
+		if connectorID == "" {
+			return errors.New("connector descriptor id is required")
+		}
+		if _, duplicate := seen[connectorID]; duplicate {
+			return fmt.Errorf("connector target %q is duplicated", connectorID)
+		}
+		seen[connectorID] = struct{}{}
+		values[index] = EnqueueTarget{ConnectorID: connectorID, Required: target.Required}
+	}
+	return policyStore.EnqueueAll(ctx, values, records, now)
 }
 
 func (coordinator *Coordinator) RunOnce(ctx context.Context, connector Connector, now time.Time) (int, error) {

@@ -7,13 +7,12 @@ inventory, documentation, schemas, project and OCSF licenses, and an executable
 copy of the verifier. `manifest.json` records the release version,
 architecture, source commit, creation time, role, mode, byte length, and
 SHA-256 digest of every artifact. `SHA256SUMS` covers every artifact and the
-manifest. A required adjacent `.sha256` file covers the complete compressed
-archive.
-
-The SHA-256 files detect corruption and unintended changes. They do not prove
-who produced the release. Transfer the archive and its sidecar through the
-organization's authenticated release and media-control process. Release
-signing and signature policy are not implemented by this script.
+manifest. Required adjacent `.sha256`, `.signature.json`, and `.signature.sig`
+files bind the complete compressed archive to an expiring publisher statement.
+The verifier derives the RSA public-key fingerprint, checks revocation policy,
+validates the signed interval and archive digest, then verifies the detached
+RSA/SHA-256 signature. Provision the trusted public key and revoked-key list
+through a separate authenticated channel; they are not carried in the archive.
 
 ## Assemble on a connected build host
 
@@ -37,6 +36,12 @@ SOURCE_DATE_EPOCH=$epoch ./scripts/build-offline-bundle.sh \
   --clickhouse-migration migrations/clickhouse/001_events.sql \
   --image-ref "ulpf=ulpf:$version" \
   --image-ref "clickhouse=clickhouse/clickhouse-server:<pinned-version>" \
+  --signing-key /secure/release-signing-key.pem \
+  --signing-public-key /release-trust/ulpf-release-public.pem \
+  --signature-expires-at 2027-09-29T00:00:00Z \
+  --artifact sbom:reports/ulpf.spdx.json=release-inputs/ulpf.spdx.json \
+  --artifact vulnerability_report:reports/vulnerabilities.json=release-inputs/vulnerabilities.json \
+  --artifact license_inventory:reports/licenses.json=release-inputs/licenses.json \
   --output "dist/ulpf-offline-$version-$arch.tar.zst"
 ```
 
@@ -53,6 +58,12 @@ assemble the same release from existing Docker-save archives:
   --clickhouse-migration migrations/clickhouse/001_events.sql \
   --image "ulpf=release-inputs/ulpf-$arch.tar" \
   --image "clickhouse=release-inputs/clickhouse-$arch.tar" \
+  --signing-key /secure/release-signing-key.pem \
+  --signing-public-key /release-trust/ulpf-release-public.pem \
+  --signature-expires-at 2027-09-29T00:00:00Z \
+  --artifact sbom:reports/ulpf.spdx.json=release-inputs/ulpf.spdx.json \
+  --artifact vulnerability_report:reports/vulnerabilities.json=release-inputs/vulnerabilities.json \
+  --artifact license_inventory:reports/licenses.json=release-inputs/licenses.json \
   --output "dist/ulpf-offline-$version-$arch.tar.zst"
 ```
 
@@ -64,8 +75,10 @@ versioned `clickhouse/clickhouse-server` tag.
 The builder validates the Linux OS, requested architecture, content-addressed
 configuration, referenced layers, and root-filesystem layer inventory. It then
 renders those proven tags into the release Compose template. The resulting
-Compose file has no build context and sets `pull_policy: never` on both
-services.
+Compose file has no build context, sets `pull_policy: never` on both services,
+and uses a non-masqueraded Docker bridge. The services can communicate with
+each other and the operator can use the published localhost port, while
+containers cannot route outbound through Docker's external NAT.
 
 Entries are written in a stable order with fixed ownership, modes, and
 `SOURCE_DATE_EPOCH`, then the complete archive is verified before success is
@@ -79,15 +92,19 @@ control. The current runtime receives the equivalent values through the
 `ulpf serve` arguments in `compose.yaml`; it does not parse the YAML file.
 
 Add generated release evidence with repeatable
-`--artifact ROLE:DESTINATION=FILE` arguments. Supported optional roles are
-`sbom`, `vulnerability_report`, `notice`, and `signature`; each added file is
-covered by the manifest and both checksum layers.
+`--artifact ROLE:DESTINATION=FILE` arguments. `sbom`,
+`vulnerability_report`, and `license_inventory` are mandatory; `notice` is
+optional. Every artifact is covered by the manifest and both checksum layers.
+The builder refuses unsigned release output. `--unsigned-test-bundle` exists
+only for repository fixtures and makes the verifier require `--test-mode`.
 
 Run verification on the build host before transfer:
 
 ```sh
 ./scripts/verify-offline-bundle.sh \
-  "dist/ulpf-offline-$version-$arch.tar.zst"
+  "dist/ulpf-offline-$version-$arch.tar.zst" \
+  --trusted-public-key /release-trust/ulpf-release-public.pem \
+  --revoked-key-file /release-trust/revoked-key-ids.txt
 ```
 
 Python 3 is required. `zstd` is also required for `.tar.zst`; use `.tar` when
@@ -95,23 +112,34 @@ zstd is unavailable. Assembly and verification make no network requests.
 
 ## Verify and install with networking disabled
 
-Copy both the archive and its `<archive>.sha256` sidecar to a clean target.
-Release verification fails when the sidecar is absent. `--test-mode` permits a
-missing sidecar only for repository fixtures and must never be used to approve
-or install a transferred release. Stage the matching
+Copy the archive plus its `.sha256`, `.signature.json`, and `.signature.sig`
+sidecars to a clean target. Separately provision the trusted publisher public
+key and current ASCII revocation list. Verification fails when trust material
+is absent, the key is wrong or revoked, the statement is expired, or the
+signature/digest differs. `--test-mode` permits missing outer trust material
+only for repository fixtures and must never approve or install a transferred
+release. Stage the matching
 `scripts/verify-offline-bundle.py` through the same authenticated media process;
 the copy inside the archive is retained for subsequent re-verification after a
 successful safe extraction.
-Disconnect the target from external networks, or apply the site's egress-deny
-policy, before running these commands. Keep that control enabled for the whole
-test so an accidental pull cannot succeed.
+Keep the target disconnected from external networks while loading the archive.
+The packaged Compose definition also disables IP masquerading on its Docker
+bridge. The clean-install harness rejects the deployment if that engine control
+is absent and fails if a container can reach an external IP. Pulling remains
+disabled independently through `pull_policy: never` and the harness's
+`--pull never` invocation.
 
 ```sh
 archive=ulpf-offline-0.1.0-amd64.tar.zst
 install_dir=/opt/ulpf/releases/0.1.0-amd64
 
-python3 ./verify-offline-bundle.py "$archive"
-python3 ./verify-offline-bundle.py "$archive" --extract "$install_dir"
+python3 ./verify-offline-bundle.py "$archive" \
+  --trusted-public-key /release-trust/ulpf-release-public.pem \
+  --revoked-key-file /release-trust/revoked-key-ids.txt
+python3 ./verify-offline-bundle.py "$archive" \
+  --trusted-public-key /release-trust/ulpf-release-public.pem \
+  --revoked-key-file /release-trust/revoked-key-ids.txt \
+  --extract "$install_dir"
 ```
 
 The extraction destination must not exist. Verification completes before the
@@ -162,9 +190,9 @@ curl --fail --silent http://127.0.0.1:8080/health/ready
 ```
 
 A successful clean-install test has all services healthy, readiness returning
-success, and no allowed egress observed by the host firewall or network
-control. Record the bundle digest, image IDs, rendered Compose validation,
-health output, and egress-control log with the release evidence.
+success, and the Compose network reported as non-masqueraded by the engine.
+Record the bundle digest, image IDs, rendered Compose validation, health output,
+and failed external egress probe with the release evidence.
 
 ## Verifier-only test and validation limits
 
@@ -183,10 +211,13 @@ wrong architectures, missing image layers, and inconsistent layer digests.
 Without a running container engine, automated validation stops after checking
 the Docker-save structure, image configuration OS/architecture, referenced
 layers, rendered Compose definition, and cryptographic inventory. It cannot
-prove that the target engine accepts or natively executes each image, that the
-full Compose stack reaches health, or that the host actually denied egress.
-Those checks must run on the offline target (or an equivalent isolated host)
-with the intended engine and architecture. The current archive contract
-permits SBOM, vulnerability-report, notice, and signature roles, but release
-production must add and enforce those artifacts when the corresponding
-generation and trust policy are available.
+prove that the target engine accepts or natively executes each image or that
+the full Compose stack reaches health. Those checks must run on the offline
+target (or an equivalent isolated host) with the intended engine and
+architecture. The clean-install harness also verifies the engine applied the
+non-masqueraded network control and rejects an allowed external egress probe.
+The release workflow uses native
+amd64 and arm64 runners, requires SBOM, vulnerability, and dependency-license
+inventories, signs and attests outputs, and invokes
+`scripts/test-offline-install.sh`. Publishing depends on protected signing-key
+secrets and both native runner jobs passing.

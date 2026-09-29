@@ -44,6 +44,18 @@ The delivery coordinator stores each connector/revision pair in SQLite before de
 
 Dead-letter replay is explicit and scoped to one connector and revision. Replay resets that delivery's attempt counter while preserving the immutable export record. Enqueue is idempotent on `(connector_id, revision_id)`. Each connector advances independently, so one unavailable destination cannot mark another destination successful.
 
+The runtime persists the complete connector policy for each revision atomically. A required connector keeps the receipt in `DELIVERY_PENDING`; a required connector DLQ moves it to `DEAD_LETTER`; and the receipt becomes `DELIVERED` after every required connector succeeds. Optional connector retries and DLQ entries remain visible and replayable but do not block `DELIVERED`. Historical rows reject a conflicting required/optional policy instead of silently changing it.
+
+The running service exposes authenticated, tenant-scoped operations using the same bearer token as the local runtime:
+
+```text
+GET  /api/v1/connectors/status?tenant_id=demo
+GET  /api/v1/connectors/dlq?tenant_id=demo&connector_id=primary&limit=50
+POST /api/v1/connectors/primary/replay/<revision_id>?tenant_id=demo
+```
+
+Status and DLQ inspection require `ops:read`; replay requires `replay:write`. DLQ responses contain connector state and lineage identifiers, not the stored envelope body or raw evidence. Replay only accepts an entry already in `DEAD_LETTER` for the authorized tenant and returns `202 Accepted` after resetting it to `PENDING`.
+
 `CoordinatorConfig` controls lease duration, batch size, retry limit, backoff bounds, and the in-process circuit breaker. The SQLite store uses WAL and `synchronous=FULL`; callers should place its database on durable local storage and back it up with the inbox state.
 
 ## Generic HTTP

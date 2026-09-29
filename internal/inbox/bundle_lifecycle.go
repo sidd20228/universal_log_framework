@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	envelopepkg "github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
 )
@@ -233,7 +234,7 @@ last_error_code = 'LEASE_EXPIRED' WHERE status = ? AND lease_until_ns <= ?`, reg
 		return registry.ReprocessJob{}, err
 	}
 	leaseUntil := now.UTC().Add(leaseDuration)
-	result, err := tx.ExecContext(ctx, `UPDATE reprocess_jobs SET status = ?, lease_owner = ?, lease_until_ns = ?, last_error_code = NULL
+	result, err := tx.ExecContext(ctx, `UPDATE reprocess_jobs SET status = ?, lease_owner = ?, lease_until_ns = ?, last_error_code = NULL, attempt_count = attempt_count + 1
 WHERE job_id = ? AND status = ?`, registry.ReprocessProcessing, owner, leaseUntil.UnixNano(), job.ID, registry.ReprocessQueued)
 	if err != nil {
 		return registry.ReprocessJob{}, fmt.Errorf("claim reprocess job: %w", err)
@@ -248,12 +249,19 @@ WHERE job_id = ? AND status = ?`, registry.ReprocessProcessing, owner, leaseUnti
 	job.LeaseOwner = owner
 	job.LeaseUntil = leaseUntil
 	job.LastErrorCode = ""
+	job.Attempts++
 	return job, nil
 }
 
-func (store *SQLiteStore) CommitReprocess(ctx context.Context, jobID, owner string, revision model.Revision) (model.Revision, bool, error) {
+func (store *SQLiteStore) CommitReprocess(ctx context.Context, jobID, owner string, revision model.Revision, built envelopepkg.Envelope) (model.Revision, bool, error) {
 	if err := revision.Validate(); err != nil {
 		return model.Revision{}, false, fmt.Errorf("validate reprocessed revision: %w", err)
+	}
+	if err := built.Validate(); err != nil {
+		return model.Revision{}, false, fmt.Errorf("validate reprocessed envelope: %w", err)
+	}
+	if err := validateEnvelopeRevision(revision, built); err != nil {
+		return model.Revision{}, false, err
 	}
 	if strings.TrimSpace(owner) == "" || revision.Parser == nil || revision.Parser.BundleSHA256 == "" {
 		return model.Revision{}, false, registry.ErrInvalidLifecycle
@@ -273,6 +281,17 @@ func (store *SQLiteStore) CommitReprocess(ctx context.Context, jobID, owner stri
 	if revision.ReceiptID != job.ReceiptID || revision.PipelineVersion != job.PipelineVersion || revision.Parser.BundleSHA256 != job.BundleDigest {
 		return model.Revision{}, false, registry.ErrInvalidLifecycle
 	}
+	var raw model.RawReference
+	var encoding, compression sql.NullString
+	var available int
+	if err := tx.QueryRowContext(ctx, `SELECT raw_ref, raw_sha256, raw_size, raw_encoding_hint, raw_compression, raw_available
+FROM receipts WHERE receipt_id = ?`, job.ReceiptID).Scan(&raw.Ref, &raw.SHA256, &raw.SizeBytes, &encoding, &compression, &available); err != nil {
+		return model.Revision{}, false, fmt.Errorf("read reprocess receipt evidence: %w", err)
+	}
+	raw.EncodingHint, raw.Compression, raw.Available = encoding.String, compression.String, available == 1
+	if built.Raw != raw {
+		return model.Revision{}, false, registry.ErrInvalidLifecycle
+	}
 	existing, err := getRevisionByKey(ctx, tx, revision.ReceiptID, revision.PipelineVersion, revision.Parser.BundleSHA256)
 	created := false
 	if errors.Is(err, ErrNotFound) {
@@ -280,9 +299,13 @@ func (store *SQLiteStore) CommitReprocess(ctx context.Context, jobID, owner stri
 		if marshalErr != nil {
 			return model.Revision{}, false, fmt.Errorf("encode reprocessed revision: %w", marshalErr)
 		}
+		envelopeBody, marshalErr := json.Marshal(built)
+		if marshalErr != nil {
+			return model.Revision{}, false, fmt.Errorf("encode reprocessed envelope: %w", marshalErr)
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO revisions (
-revision_id, receipt_id, pipeline_version, bundle_sha256, revision_json, created_at_ns
-) VALUES (?, ?, ?, ?, ?, ?)`, revision.ID, revision.ReceiptID, revision.PipelineVersion, revision.Parser.BundleSHA256, string(body), revision.CompletedAt.UTC().UnixNano())
+revision_id, receipt_id, pipeline_version, bundle_sha256, revision_json, envelope_json, created_at_ns
+) VALUES (?, ?, ?, ?, ?, ?, ?)`, revision.ID, revision.ReceiptID, revision.PipelineVersion, revision.Parser.BundleSHA256, string(body), string(envelopeBody), revision.CompletedAt.UTC().UnixNano())
 		if err != nil {
 			return model.Revision{}, false, fmt.Errorf("insert reprocessed revision: %w", err)
 		}
@@ -325,6 +348,7 @@ last_error_code = ? WHERE job_id = ? AND status = ? AND lease_owner = ? AND leas
 
 const reprocessSelect = `SELECT job_id, receipt_id, pipeline_version, bundle_sha256, reason, status,
 requested_at_ns, requested_by, lease_owner, lease_until_ns, last_error_code, completed_revision_id
+ , attempt_count
 FROM reprocess_jobs`
 
 func getReprocessByKey(ctx context.Context, queryer interface {
@@ -339,7 +363,7 @@ func scanReprocessJob(row rowScanner) (registry.ReprocessJob, error) {
 	var leaseOwner, lastError, completedRevision sql.NullString
 	var leaseUntil sql.NullInt64
 	if err := row.Scan(&job.ID, &job.ReceiptID, &job.PipelineVersion, &job.BundleDigest, &job.Reason, &job.Status,
-		&requestedAt, &job.RequestedBy, &leaseOwner, &leaseUntil, &lastError, &completedRevision); err != nil {
+		&requestedAt, &job.RequestedBy, &leaseOwner, &leaseUntil, &lastError, &completedRevision, &job.Attempts); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return registry.ReprocessJob{}, registry.ErrReprocessNotFound
 		}

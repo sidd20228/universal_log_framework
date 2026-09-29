@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 )
 
@@ -67,6 +68,7 @@ type ReprocessJob struct {
 	LeaseUntil          time.Time       `json:"lease_until,omitempty"`
 	LastErrorCode       string          `json:"last_error_code,omitempty"`
 	CompletedRevisionID string          `json:"completed_revision_id,omitempty"`
+	Attempts            int             `json:"attempts"`
 }
 
 type LifecycleStore interface {
@@ -78,7 +80,7 @@ type LifecycleStore interface {
 	EnqueueReprocess(context.Context, ReprocessJob) (ReprocessJob, bool, error)
 	GetReprocessJob(context.Context, string) (ReprocessJob, error)
 	ClaimReprocess(context.Context, string, time.Time, time.Duration) (ReprocessJob, error)
-	CommitReprocess(context.Context, string, string, model.Revision) (model.Revision, bool, error)
+	CommitReprocess(context.Context, string, string, model.Revision, envelope.Envelope) (model.Revision, bool, error)
 	ReleaseReprocess(context.Context, string, string, bool, string) error
 }
 
@@ -152,6 +154,13 @@ func (lifecycle *Lifecycle) RegistrySnapshot() *Snapshot {
 		return newSnapshot(nil)
 	}
 	return lifecycle.registry.Snapshot()
+}
+
+func (lifecycle *Lifecycle) ListInstalled(ctx context.Context) ([]InstalledBundle, error) {
+	if lifecycle == nil {
+		return nil, errors.New("bundle lifecycle is required")
+	}
+	return lifecycle.store.ListInstalledBundles(ctx)
 }
 
 // DescriptorByDigest reloads an installed descriptor through the immutable
@@ -279,11 +288,11 @@ func (lifecycle *Lifecycle) ClaimReprocess(ctx context.Context, owner string, no
 	return lifecycle.store.ClaimReprocess(ctx, owner, now, leaseDuration)
 }
 
-func (lifecycle *Lifecycle) CommitReprocess(ctx context.Context, jobID, owner string, revision model.Revision) (model.Revision, bool, error) {
+func (lifecycle *Lifecycle) CommitReprocess(ctx context.Context, jobID, owner string, revision model.Revision, built envelope.Envelope) (model.Revision, bool, error) {
 	if !boundedText(jobID, maxLifecycleIDBytes) || !boundedText(owner, maxLifecycleIDBytes) {
 		return model.Revision{}, false, ErrInvalidLifecycle
 	}
-	return lifecycle.store.CommitReprocess(ctx, jobID, owner, revision)
+	return lifecycle.store.CommitReprocess(ctx, jobID, owner, revision, built)
 }
 
 func (lifecycle *Lifecycle) ReleaseReprocess(ctx context.Context, jobID, owner string, retry bool, errorCode string) error {

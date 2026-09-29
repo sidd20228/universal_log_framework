@@ -173,11 +173,12 @@ See the [architecture two-pager](docs/ARCHITECTURE_TWO_PAGER.md), the
   networks. TLS termination, mTLS/OIDC, centralized policy, replicated
   storage, automated retention, and automated backups remain deployment work.
 - Bundle validate, install, list, activation history, and CAS activation are
-  exposed through the CLI. `serve` installs and compiles configured bundles at
-  startup. Authenticated hot reload and the durable reprocess executor remain
-  lifecycle work.
-- Offline checksums detect corruption; the current offline builder does not
-  create a release signature or establish publisher identity.
+  exposed through the CLI. The authenticated control API performs precompiled
+  live activation or rollback and durable reprocessing against retained
+  evidence.
+- Offline releases require checksums, SBOM/vulnerability/license inventories,
+  and an expiring detached publisher signature verified with separately
+  provisioned trust and revocation files.
 
 The [implementation plan](docs/IMPLEMENTATION_PLAN.md) describes the intended
 evolution beyond this boundary. Do not infer vendor certification or measured
@@ -191,7 +192,7 @@ for measurements on the target host.
 - [Operations dashboard](docs/DASHBOARD.md): live metrics, event trace,
   authorization, and disconnected behavior.
 - [Expected outcomes](docs/EXPECTED_OUTCOMES.md): evidence-backed status for
-  the requested outcomes a–k and the remaining runtime integration work.
+  the requested outcomes a–k and their external qualification boundaries.
 - [Compose deployment](docs/COMPOSE.md): container startup and security
   settings.
 - [Offline installation](docs/OFFLINE_INSTALL.md): deterministic archive

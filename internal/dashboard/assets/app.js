@@ -13,6 +13,8 @@
     eventsNewestFirst: true,
     activity: [],
     summary: null,
+    health: null,
+    fallbackEvents: [],
     selectedRevision: "",
     refreshController: null,
     timer: null,
@@ -30,6 +32,8 @@
     pipelineState: element("pipelineState"), pipelineStages: element("pipelineStages"), chart: element("activityChart"),
     chartSummary: element("chartSummary"), donut: element("statusDonut"), donutTotal: element("donutTotal"),
     statusList: element("statusList"), eventsBody: element("eventsBody"), eventCount: element("eventCount"), eventScope: element("eventScope"),
+    environmentFilter: element("environmentFilter"), instanceFilter: element("instanceFilter"),
+    scopeSummary: element("scopeSummary"), nodeGroups: element("nodeGroups"),
     drawer: element("traceDrawer"), traceContent: element("traceContent"),
     closeTrace: element("closeTraceButton"), scrim: element("drawerScrim"), announcer: element("announcer"),
   };
@@ -132,6 +136,155 @@
 
   function totalsOf(summary) {
     return summary?.totals && typeof summary.totals === "object" ? summary.totals : {};
+  }
+
+  function originsOf(summary) {
+    return Array.isArray(summary?.origins) ? summary.origins : [];
+  }
+
+  function nodesOf(summary) {
+    return Array.isArray(summary?.nodes) ? summary.nodes : [];
+  }
+
+  function replaceSelectOptions(select, values, allLabel, previous) {
+    const fragment = document.createDocumentFragment();
+    const all = document.createElement("option"); all.value = ""; all.textContent = allLabel; fragment.append(all);
+    values.forEach((value) => {
+      const option = document.createElement("option"); option.value = value; option.textContent = value; fragment.append(option);
+    });
+    select.replaceChildren(fragment);
+    select.disabled = values.length === 0;
+    select.value = values.includes(previous) ? previous : "";
+  }
+
+  function populateScopeFilters(summary) {
+    const origins = originsOf(summary);
+    const records = [...origins, ...nodesOf(summary)];
+    const previousEnvironment = ui.environmentFilter.value;
+    const environments = [...new Set(records.map((item) => String(item?.environment_id || "")).filter(Boolean))].sort();
+    replaceSelectOptions(ui.environmentFilter, environments, "All environments", previousEnvironment);
+    const selectedEnvironment = ui.environmentFilter.value;
+    const previousInstance = ui.instanceFilter.value;
+    const instances = [...new Set(records
+      .filter((item) => !selectedEnvironment || item?.environment_id === selectedEnvironment)
+      .map((item) => String(item?.instance_id || "")).filter(Boolean))].sort();
+    replaceSelectOptions(ui.instanceFilter, instances, "All instances", previousInstance);
+  }
+
+  function nodeState(node) {
+    if (node?.available && !node?.stale) return { label: "Current", className: "current" };
+    if (node?.available) return { label: "Stale", className: "stale" };
+    if (node?.retained) return { label: "Unavailable · last known retained", className: "unavailable" };
+    return { label: "Unavailable", className: "unavailable" };
+  }
+
+  function renderNodeGroups(summary) {
+    ui.nodeGroups.replaceChildren();
+    const nodes = nodesOf(summary);
+    if (nodes.length === 0) {
+      const empty = document.createElement("p"); empty.className = "node-empty"; empty.textContent = "No runtime origins were returned."; ui.nodeGroups.append(empty);
+      return;
+    }
+    const groups = new Map();
+    nodes.forEach((node) => {
+      const environment = node?.environment_id || "Unidentified environment";
+      if (!groups.has(environment)) groups.set(environment, []);
+      groups.get(environment).push(node);
+    });
+    [...groups.keys()].sort().forEach((environment) => {
+      const group = document.createElement("section"); group.className = "node-group";
+      const heading = document.createElement("h3"); heading.textContent = environment; group.append(heading);
+      const list = document.createElement("div"); list.className = "node-list";
+      groups.get(environment).sort((left, right) => String(left?.instance_id).localeCompare(String(right?.instance_id))).forEach((node) => {
+        const status = nodeState(node);
+        const button = document.createElement("button"); button.type = "button"; button.className = `node-card ${status.className}`;
+        if (ui.environmentFilter.value === node.environment_id && ui.instanceFilter.value === node.instance_id) button.classList.add("selected");
+        const title = document.createElement("strong"); title.textContent = node.instance_id || node.id || "Unidentified instance";
+        const detail = document.createElement("span"); detail.textContent = status.label;
+        const observed = document.createElement("small");
+        observed.textContent = node.last_seen_at ? `Last seen ${formatTime(node.last_seen_at)}` : node.generated_at ? `Snapshot ${formatTime(node.generated_at)}` : "No successful snapshot";
+        button.append(title, detail, observed);
+        button.addEventListener("click", () => {
+          ui.environmentFilter.value = node.environment_id || "";
+          populateScopeFilters(state.summary);
+          ui.instanceFilter.value = node.instance_id || "";
+          applyScope();
+        });
+        list.append(button);
+      });
+      group.append(list); ui.nodeGroups.append(group);
+    });
+  }
+
+  function addCounts(target, source) {
+    Object.entries(source && typeof source === "object" ? source : {}).forEach(([key, raw]) => {
+      target[key] = (target[key] || 0) + (numberOrNull(raw) || 0);
+    });
+  }
+
+  function buildScopedPipeline(totals, receiptStates) {
+    return [
+      ["frame", "Frame", totals.receipts], ["admit", "Admit", totals.receipts],
+      ["interpret", "Interpret", totals.revisions], ["commit", "Commit", totals.revisions],
+      ["deliver", "Deliver", totals.delivered],
+    ].map(([stage, label, count]) => ({
+      stage, label, count,
+      status: stage === "deliver" && totals.failed > 0 ? "attention" : stage === "interpret" && (receiptStates.PROCESSING || 0) > 0 ? "active" : count > 0 ? "active" : "idle",
+    }));
+  }
+
+  function aggregateOrigins(summary, origins) {
+    const totals = { receipts: 0, revisions: 0, raw_bytes: 0, pending: 0, failed: 0, delivered: 0 };
+    const receiptStateCounts = {}, statusCounts = {}, activityByTime = new Map(), recentEvents = [];
+    let acceptedTotal = 0, committedTotal = 0;
+    origins.forEach((origin) => {
+      Object.keys(totals).forEach((key) => { totals[key] += numberOrNull(origin?.totals?.[key]) || 0; });
+      acceptedTotal += numberOrNull(origin?.accepted_total) || 0;
+      committedTotal += numberOrNull(origin?.committed_total) || 0;
+      addCounts(receiptStateCounts, origin?.receipt_state_counts); addCounts(statusCounts, origin?.status_counts);
+      (Array.isArray(origin?.activity) ? origin.activity : []).forEach((bucket) => {
+        const key = String(bucket?.time || "");
+        if (!key) return;
+        const current = activityByTime.get(key) || { time: key, accepted: 0, committed: 0 };
+        current.accepted += numberOrNull(bucket?.accepted) || 0; current.committed += numberOrNull(bucket?.committed) || 0;
+        activityByTime.set(key, current);
+      });
+      if (Array.isArray(origin?.recent_events)) recentEvents.push(...origin.recent_events);
+    });
+    recentEvents.sort((left, right) => new Date(right?.received_at || 0) - new Date(left?.received_at || 0));
+    const environment = ui.environmentFilter.value, instance = ui.instanceFilter.value;
+    return {
+      generated_at: summary?.generated_at, tenant_id: summary?.tenant_id, environment_id: environment, instance_id: instance,
+      totals, accepted_total: acceptedTotal, committed_total: committedTotal,
+      receipt_state_counts: receiptStateCounts, status_counts: statusCounts,
+      pipeline: buildScopedPipeline(totals, receiptStateCounts),
+      activity: [...activityByTime.values()].sort((left, right) => new Date(left.time) - new Date(right.time)),
+      recent_events: recentEvents.slice(0, 20),
+      nodes: nodesOf(summary).filter((node) => (!environment || node?.environment_id === environment) && (!instance || node?.instance_id === instance)),
+      origins,
+    };
+  }
+
+  function scopedSummary() {
+    const summary = state.summary;
+    const origins = originsOf(summary);
+    const environment = ui.environmentFilter.value, instance = ui.instanceFilter.value;
+    if (!summary || origins.length === 0 || (!environment && !instance)) return summary;
+    return aggregateOrigins(summary, origins.filter((origin) =>
+      (!environment || origin?.environment_id === environment) && (!instance || origin?.instance_id === instance)));
+  }
+
+  function applyScope() {
+    const view = scopedSummary();
+    const environment = ui.environmentFilter.value, instance = ui.instanceFilter.value;
+    const labels = [environment, instance].filter(Boolean);
+    const scopeLabel = labels.length ? labels.join(" / ") : "All environments and instances";
+    state.activity = normalizeActivity(view);
+    state.events = Array.isArray(view?.recent_events) ? view.recent_events : state.fallbackEvents;
+    state.eventsNewestFirst = Array.isArray(view?.recent_events);
+    updateMetrics(view, state.health); updatePipeline(view); updateDistribution(view); drawActivityChart(); renderEvents(); renderNodeGroups(state.summary);
+    ui.scopeSummary.textContent = `${scopeLabel} · ${originsOf(view).length || nodesOf(view).length || 0} runtime origin${(originsOf(view).length || nodesOf(view).length) === 1 ? "" : "s"}`;
+    ui.eventScope.textContent = `${scopeLabel} · ${state.eventsNewestFirst ? "newest-first summary window" : "bounded event page fallback"}`;
   }
 
   function updateMetrics(summary, health) {
@@ -372,6 +525,13 @@
     ui.traceContent.replaceChildren(content);
   }
 
+  function traceMetadataURL(provided, fallback) {
+    const tracePath = /^\/api\/v1\/(?:events|receipts)\/[^/?#]+$/;
+    const federatedTracePath = /^\/api\/v1\/federation\/[^/?#]+\/(?:events|receipts)\/[^/?#]+$/;
+    if (typeof provided === "string" && (tracePath.test(provided) || federatedTracePath.test(provided))) return provided;
+    return fallback;
+  }
+
   async function inspectEvent(event, trigger) {
     if (!event.revision_id || !event.receipt_id || !state.token) return;
     state.selectedRevision = event.revision_id;
@@ -383,8 +543,8 @@
     ui.closeTrace.focus();
     try {
       const [envelope, receipt] = await Promise.all([
-        fetchJSON(`/api/v1/events/${encodeURIComponent(event.revision_id)}`),
-        fetchJSON(`/api/v1/receipts/${encodeURIComponent(event.receipt_id)}`),
+        fetchJSON(traceMetadataURL(event.event_url, `/api/v1/events/${encodeURIComponent(event.revision_id)}`)),
+        fetchJSON(traceMetadataURL(event.receipt_url, `/api/v1/receipts/${encodeURIComponent(event.receipt_id)}`)),
       ]);
       renderTrace(event, envelope, receipt);
       announce(`Trace loaded for revision ${event.revision_id}`);
@@ -412,16 +572,19 @@
 
   function applySummary(summary, health) {
     state.summary = summary;
-    state.activity = normalizeActivity(summary);
-    updateMetrics(summary, health);
-    updatePipeline(summary);
-    updateDistribution(summary);
-    drawActivityChart();
+    state.health = health;
+    populateScopeFilters(summary);
+    applyScope();
     ui.lastUpdated.textContent = formatTime(summary?.generated_at || new Date().toISOString());
   }
 
   function resetData() {
-    state.summary = null; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
+    state.summary = null; state.health = null; state.fallbackEvents = []; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
+    replaceSelectOptions(ui.environmentFilter, [], "All environments", "");
+    replaceSelectOptions(ui.instanceFilter, [], "All instances", "");
+    ui.nodeGroups.replaceChildren();
+    const empty = document.createElement("p"); empty.className = "node-empty"; empty.textContent = "Node availability will appear after connection."; ui.nodeGroups.append(empty);
+    ui.scopeSummary.textContent = "Connect to load runtime origins.";
     updateMetrics(null, null); updatePipeline(null); updateDistribution(null); drawActivityChart(); renderEvents();
     ui.lastUpdated.textContent = "—"; ui.eventScope.textContent = "Newest-first summary window";
   }
@@ -450,11 +613,9 @@
       const page = eventsResult.status === "fulfilled" ? eventsResult.value : { items: [] };
       const recentEvents = Array.isArray(summary?.recent_events) ? summary.recent_events : null;
       state.connected = true;
-      state.events = recentEvents || (Array.isArray(page.items) ? page.items : []);
-      state.eventsNewestFirst = recentEvents !== null;
-      ui.eventScope.textContent = recentEvents !== null ? "Newest-first summary window" : "Bounded event page fallback";
+      state.fallbackEvents = Array.isArray(page.items) ? page.items : [];
+      state.events = recentEvents || state.fallbackEvents;
       applySummary(summary, health);
-      renderEvents();
       setConnection(health?.ready ? "live" : "error", health?.ready ? "Connected" : "Connected · not ready", state.tenant);
       ui.sidebarTenant.textContent = state.tenant;
       const partial = summaryResult.status === "rejected" || eventsResult.status === "rejected";
@@ -510,6 +671,8 @@
   ui.disconnect.addEventListener("click", disconnect);
   ui.refresh.addEventListener("click", () => refresh());
   ui.autoRefresh.addEventListener("change", scheduleRefresh);
+  ui.environmentFilter.addEventListener("change", () => { populateScopeFilters(state.summary); applyScope(); });
+  ui.instanceFilter.addEventListener("change", applyScope);
   ui.closeTrace.addEventListener("click", closeTrace);
   ui.scrim.addEventListener("click", closeTrace);
   document.addEventListener("keydown", (event) => {

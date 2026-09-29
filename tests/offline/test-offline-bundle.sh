@@ -13,9 +13,14 @@ printf '%s\n' '{"type":"object"}' >"$fixture/schemas/example.json"
 printf '%s\n' 'fixture project license' >"$fixture/LICENSE"
 printf '%s\n' 'fixture schema license' >"$fixture/OCSF-LICENSE"
 printf '%s\n' 'synthetic release notice' >"$fixture/NOTICE"
+printf '%s\n' '{"spdxVersion":"SPDX-2.3"}' >"$fixture/sbom.json"
+printf '%s\n' '{"matches":[]}' >"$fixture/vulnerabilities.json"
+printf '%s\n' '{"modules":[]}' >"$fixture/licenses.json"
 cp deployments/offline/compose.yaml "$fixture/compose.yaml"
 printf '%s\n' 'CREATE DATABASE IF NOT EXISTS ulpf;' >"$fixture/001_events.sql"
 printf '%s\n' 'config_version: ulpf-config/1' >"$fixture/ulpf.yaml"
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$fixture/signing-key.pem" >/dev/null 2>&1
+openssl pkey -in "$fixture/signing-key.pem" -pubout -out "$fixture/signing-public.pem" >/dev/null 2>&1
 
 python3 - "$fixture/images" <<'PY'
 import io
@@ -85,6 +90,12 @@ build_bundle() {
     --schemas-root "$fixture/schemas" \
     --license "$fixture/LICENSE" \
     --ocsf-license "$fixture/OCSF-LICENSE" \
+    --signing-key "$fixture/signing-key.pem" \
+    --signing-public-key "$fixture/signing-public.pem" \
+    --signature-expires-at 2099-01-01T00:00:00Z \
+    --artifact "sbom:reports/sbom.json=$fixture/sbom.json" \
+    --artifact "vulnerability_report:reports/vulnerabilities.json=$fixture/vulnerabilities.json" \
+    --artifact "license_inventory:reports/licenses.json=$fixture/licenses.json" \
     --artifact "notice:reports/NOTICE=$fixture/NOTICE" \
     --image "ulpf=$fixture/images/ulpf.tar" \
     --image "clickhouse=$fixture/images/clickhouse.tar"
@@ -93,10 +104,48 @@ build_bundle() {
 build_bundle "$fixture/first.tar"
 build_bundle "$fixture/second.tar"
 cmp "$fixture/first.tar" "$fixture/second.tar"
-./scripts/verify-offline-bundle.sh "$fixture/first.tar"
+./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/signing-public.pem"
+
+mv "$fixture/first.tar.signature.sig" "$fixture/first.tar.signature.sig.saved"
+if ./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/signing-public.pem" >/dev/null 2>&1; then
+  printf '%s\n' 'release verification unexpectedly accepted a missing signature' >&2
+  exit 1
+fi
+mv "$fixture/first.tar.signature.sig.saved" "$fixture/first.tar.signature.sig"
+
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$fixture/untrusted-key.pem" >/dev/null 2>&1
+openssl pkey -in "$fixture/untrusted-key.pem" -pubout -out "$fixture/untrusted-public.pem" >/dev/null 2>&1
+if ./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/untrusted-public.pem" >/dev/null 2>&1; then
+  printf '%s\n' 'release verification unexpectedly accepted an untrusted key' >&2
+  exit 1
+fi
+
+key_id=$(openssl pkey -pubin -in "$fixture/signing-public.pem" -outform DER 2>/dev/null | openssl dgst -sha256 | awk '{print "sha256:" $NF}')
+printf '%s\n' "$key_id" >"$fixture/revoked-keys.txt"
+if ./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/signing-public.pem" --revoked-key-file "$fixture/revoked-keys.txt" >/dev/null 2>&1; then
+  printf '%s\n' 'release verification unexpectedly accepted a revoked key' >&2
+  exit 1
+fi
+
+cp "$fixture/first.tar.signature.json" "$fixture/valid-signature.json"
+cp "$fixture/first.tar.signature.sig" "$fixture/valid-signature.sig"
+python3 - "$fixture/first.tar.signature.json" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+value["expires_at"] = "2000-01-01T00:00:00Z"
+path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+PY
+openssl dgst -sha256 -sign "$fixture/signing-key.pem" -out "$fixture/first.tar.signature.sig" "$fixture/first.tar.signature.json"
+if ./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/signing-public.pem" >/dev/null 2>&1; then
+  printf '%s\n' 'release verification unexpectedly accepted an expired signature' >&2
+  exit 1
+fi
+mv "$fixture/valid-signature.json" "$fixture/first.tar.signature.json"
+mv "$fixture/valid-signature.sig" "$fixture/first.tar.signature.sig"
 
 cp "$fixture/first.tar" "$fixture/no-sidecar.tar"
-if ./scripts/verify-offline-bundle.sh "$fixture/no-sidecar.tar" >/dev/null 2>&1; then
+if ./scripts/verify-offline-bundle.sh "$fixture/no-sidecar.tar" --trusted-public-key "$fixture/signing-public.pem" >/dev/null 2>&1; then
   printf '%s\n' 'release verification unexpectedly accepted a missing checksum sidecar' >&2
   exit 1
 fi
@@ -107,7 +156,7 @@ if ./scripts/verify-offline-bundle.sh "$fixture/archive-link.tar" >/dev/null 2>&
   exit 1
 fi
 
-./scripts/verify-offline-bundle.sh "$fixture/first.tar" --extract "$fixture/extracted"
+./scripts/verify-offline-bundle.sh "$fixture/first.tar" --trusted-public-key "$fixture/signing-public.pem" --extract "$fixture/extracted"
 cmp "$fixture/ulpf.yaml" "$fixture/extracted/config/ulpf.yaml"
 cmp "$fixture/001_events.sql" "$fixture/extracted/migrations/clickhouse/001_events.sql"
 test -x "$fixture/extracted/install/verify-offline-bundle.py"
@@ -131,7 +180,7 @@ if command -v zstd >/dev/null 2>&1; then
   build_bundle "$fixture/first.tar.zst"
   build_bundle "$fixture/second.tar.zst"
   cmp "$fixture/first.tar.zst" "$fixture/second.tar.zst"
-  ./scripts/verify-offline-bundle.sh "$fixture/first.tar.zst"
+  ./scripts/verify-offline-bundle.sh "$fixture/first.tar.zst" --trusted-public-key "$fixture/signing-public.pem"
 fi
 
 cp "$fixture/first.tar" "$fixture/tampered.tar"
@@ -221,6 +270,10 @@ if ./scripts/build-offline-bundle.sh \
   --clickhouse-migration "$fixture/001_events.sql" \
   --docs-root "$fixture/docs" --schemas-root "$fixture/schemas" \
   --license "$fixture/LICENSE" --ocsf-license "$fixture/OCSF-LICENSE" \
+  --unsigned-test-bundle \
+  --artifact "sbom:reports/sbom.json=$fixture/sbom.json" \
+  --artifact "vulnerability_report:reports/vulnerabilities.json=$fixture/vulnerabilities.json" \
+  --artifact "license_inventory:reports/licenses.json=$fixture/licenses.json" \
   --image "ulpf=$fixture/images/ulpf.tar" >/dev/null 2>&1; then
   printf '%s\n' 'incomplete image inventory unexpectedly assembled' >&2
   exit 1
@@ -246,6 +299,10 @@ if ./scripts/build-offline-bundle.sh \
   --clickhouse-migration "$fixture/001_events.sql" \
   --docs-root "$fixture/docs" --schemas-root "$fixture/schemas" \
   --license "$fixture/LICENSE" --ocsf-license "$fixture/OCSF-LICENSE" \
+  --unsigned-test-bundle \
+  --artifact "sbom:reports/sbom.json=$fixture/sbom.json" \
+  --artifact "vulnerability_report:reports/vulnerabilities.json=$fixture/vulnerabilities.json" \
+  --artifact "license_inventory:reports/licenses.json=$fixture/licenses.json" \
   --image "ulpf=$fixture/images/bad.tar" \
   --image "clickhouse=$fixture/images/clickhouse.tar" >/dev/null 2>&1; then
   printf '%s\n' 'unsafe nested image archive unexpectedly assembled' >&2
@@ -263,6 +320,10 @@ expect_image_rejected() {
     --clickhouse-migration "$fixture/001_events.sql" \
     --docs-root "$fixture/docs" --schemas-root "$fixture/schemas" \
     --license "$fixture/LICENSE" --ocsf-license "$fixture/OCSF-LICENSE" \
+    --unsigned-test-bundle \
+    --artifact "sbom:reports/sbom.json=$fixture/sbom.json" \
+    --artifact "vulnerability_report:reports/vulnerabilities.json=$fixture/vulnerabilities.json" \
+    --artifact "license_inventory:reports/licenses.json=$fixture/licenses.json" \
     --image "ulpf=$image" \
     --image "clickhouse=$fixture/images/clickhouse.tar" >/dev/null 2>&1; then
     printf '%s\n' "$name image unexpectedly assembled" >&2

@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/inbox"
+	"github.com/sidd20228/universal_log_framework/internal/interpret/mapping"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
 )
@@ -52,7 +54,7 @@ func TestBundleLifecycleDemoOnboardingAndImmutableReprocess(t *testing.T) {
 	}
 
 	receivedAt := time.Now().UTC().Add(-time.Minute)
-	receipt := lifecycleReceipt("receipt-demo", receivedAt)
+	receipt := lifecycleReceipt("018f9f18-1f53-7a64-8c2c-2cf05f89a001", receivedAt)
 	if err := store.InsertReceipt(ctx, receipt); err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +62,7 @@ func TestBundleLifecycleDemoOnboardingAndImmutableReprocess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	initialRevision := lifecycleRevision("revision-v1", receipt.ID, "pipeline-1", v1, receivedAt.Add(time.Second))
+	initialRevision := lifecycleRevision("018f9f18-1f53-7a64-8c2c-2cf05f89a002", receipt.ID, "1.0.0", v1, receivedAt.Add(time.Second))
 	if _, created, err := store.CommitRevision(ctx, initialRevision, claim.LeaseOwner); err != nil || !created {
 		t.Fatalf("CommitRevision() = created %v, error %v", created, err)
 	}
@@ -84,11 +86,11 @@ func TestBundleLifecycleDemoOnboardingAndImmutableReprocess(t *testing.T) {
 		t.Fatalf("v2 activation = %+v", activationV2)
 	}
 
-	job, created, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "pipeline-2", v2.Digest, "apply reviewed v2 mapping", "operator@example.test")
+	job, created, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "2.0.0", v2.Digest, "apply reviewed v2 mapping", "operator@example.test")
 	if err != nil || !created {
 		t.Fatalf("ScheduleReprocess() = (%+v, %v, %v)", job, created, err)
 	}
-	duplicate, created, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "pipeline-2", v2.Digest, "duplicate request", "operator@example.test")
+	duplicate, created, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "2.0.0", v2.Digest, "duplicate request", "operator@example.test")
 	if err != nil || created || duplicate.ID != job.ID {
 		t.Fatalf("duplicate ScheduleReprocess() = (%+v, %v, %v)", duplicate, created, err)
 	}
@@ -96,10 +98,14 @@ func TestBundleLifecycleDemoOnboardingAndImmutableReprocess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reprocessed := lifecycleRevision("revision-v2", receipt.ID, "pipeline-2", v2, receivedAt.Add(2*time.Second))
-	committed, created, err := lifecycle.CommitReprocess(ctx, claimedJob.ID, "reprocess-worker", reprocessed)
+	reprocessed := lifecycleRevision("018f9f18-1f53-7a64-8c2c-2cf05f89a003", receipt.ID, "2.0.0", v2, receivedAt.Add(2*time.Second))
+	committed, created, err := lifecycle.CommitReprocess(ctx, claimedJob.ID, "reprocess-worker", reprocessed, lifecycleEnvelope(t, receipt, reprocessed))
 	if err != nil || !created || committed.ID != reprocessed.ID {
 		t.Fatalf("CommitReprocess() = (%+v, %v, %v)", committed, created, err)
+	}
+	storedEnvelope, err := store.GetEnvelope(ctx, reprocessed.ID)
+	if err != nil || storedEnvelope.Processing.RevisionID != reprocessed.ID || storedEnvelope.Raw != receipt.Raw {
+		t.Fatalf("stored reprocess envelope = (%+v, %v)", storedEnvelope, err)
 	}
 	completedJob, err := lifecycle.GetReprocessJob(ctx, job.ID)
 	if err != nil || completedJob.Status != registry.ReprocessComplete || completedJob.CompletedRevisionID != reprocessed.ID {
@@ -220,11 +226,11 @@ func TestReprocessRejectsMismatchedRevisionAndSupportsRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipt := lifecycleReceipt("receipt-retry", time.Now().UTC())
+	receipt := lifecycleReceipt("018f9f18-1f53-7a64-8c2c-2cf05f89a011", time.Now().UTC())
 	if err := store.InsertReceipt(ctx, receipt); err != nil {
 		t.Fatal(err)
 	}
-	job, _, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "pipeline-retry", installed.Digest, "retry test", "operator")
+	job, _, err := lifecycle.ScheduleReprocess(ctx, receipt.ID, "1.0.0", installed.Digest, "retry test", "operator")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,8 +238,8 @@ func TestReprocessRejectsMismatchedRevisionAndSupportsRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mismatched := lifecycleRevision("bad-revision", receipt.ID, "wrong-pipeline", installed, time.Now().UTC())
-	if _, _, err := lifecycle.CommitReprocess(ctx, job.ID, claimed.LeaseOwner, mismatched); !errors.Is(err, registry.ErrInvalidLifecycle) {
+	mismatched := lifecycleRevision("018f9f18-1f53-7a64-8c2c-2cf05f89a012", receipt.ID, "9.9.9", installed, time.Now().UTC())
+	if _, _, err := lifecycle.CommitReprocess(ctx, job.ID, claimed.LeaseOwner, mismatched, lifecycleEnvelope(t, receipt, mismatched)); !errors.Is(err, registry.ErrInvalidLifecycle) {
 		t.Fatalf("mismatched commit error = %v", err)
 	}
 	if err := lifecycle.ReleaseReprocess(ctx, job.ID, claimed.LeaseOwner, true, "TRANSIENT"); err != nil {
@@ -263,9 +269,18 @@ func lifecycleRevision(id, receiptID, pipeline string, bundle registry.Installed
 	return model.Revision{
 		ID: id, ReceiptID: receiptID, PipelineVersion: pipeline, SchemaVersion: "ulpf-envelope/1.0.0",
 		Parser: &model.ParserIdentity{ID: bundle.BundleID + "-parser", Version: bundle.Version, BundleSHA256: bundle.Digest},
-		Status: model.StatusParsed, Confidence: &confidence, Issues: []model.Issue{},
+		Status: model.StatusInvalid, Confidence: &confidence, Issues: []model.Issue{},
 		StartedAt: completedAt.Add(-time.Millisecond), CompletedAt: completedAt,
 	}
+}
+
+func lifecycleEnvelope(t *testing.T, receipt model.Receipt, revision model.Revision) envelope.Envelope {
+	t.Helper()
+	built, err := envelope.Build(envelope.Input{Receipt: receipt, Revision: revision, Mapping: mapping.Result{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
 }
 
 func TestInstalledBundleIsIndependentOfSourceDirectory(t *testing.T) {

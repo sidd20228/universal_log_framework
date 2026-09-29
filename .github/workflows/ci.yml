@@ -8,22 +8,93 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  static-and-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - name: Verify formatting
+      - name: Install schema validator
+        run: python3 -m pip install --disable-pip-version-check 'jsonschema[format]>=4,<5'
+      - name: Formatting
         run: make fmt
       - name: Vet
         run: make vet
-      - name: Test
+      - name: Unit and integration tests
         run: make test
-      - name: Security corpus smoke
+      - name: JSON Schema contracts
+        run: ./scripts/validate-schemas.sh
+      - name: OCSF vendor integrity
+        run: ./scripts/verify-ocsf-vendor.sh
+      - name: Corpus integrity and coverage
+        run: ./scripts/verify-corpus.sh
+      - name: Security regression corpus
         run: make security-smoke
-      - name: Build
+      - name: Container policy success and rejection cases
+        run: ./tests/container/test-policy.sh
+      - name: Offline archive determinism and hostile inputs
+        run: ./tests/offline/test-offline-bundle.sh
+      - name: Build static binary
         run: make build
+
+  race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Race detector
+        run: make test-race
+
+  compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [static-and-unit, race]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Docker Compose engine
+        run: |
+          docker info
+          docker compose version
+      - name: Engine-backed admission-to-ClickHouse-query smoke
+        run: ./scripts/test-compose.sh
+
+  evaluation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: compose
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install evaluation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes poppler-utils zstd
+          python3 -m pip install --disable-pip-version-check 'jsonschema[format]>=4,<5'
+      - name: Require Docker Compose engine
+        run: |
+          docker info
+          docker compose version
+      - name: Full evaluation verifier
+        run: ./scripts/verify-evaluation.sh
+      - name: Publish verifier report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-${{ github.sha }}
+          path: output/evaluation/verification.txt
+          if-no-files-found: error

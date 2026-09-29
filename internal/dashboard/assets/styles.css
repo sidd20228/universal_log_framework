@@ -27,9 +27,9 @@ body {
   background: var(--canvas);
   font: 14px/1.45 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-button, input { font: inherit; }
-button, a, input { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, input:focus-visible {
+button, input, select { font: inherit; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
   outline: 3px solid rgba(8, 127, 189, .28);
   outline-offset: 2px;
 }
@@ -100,6 +100,27 @@ h1 { margin-bottom: 3px; font-size: clamp(26px, 3vw, 36px); line-height: 1.1; le
 .notice[hidden] { display: none; }
 .notice.error { border-color: #efc0c9; border-left-color: var(--red); color: #85283a; background: #fff1f4; }
 .notice.success { border-color: #b8dfd0; border-left-color: var(--green); color: #17634c; background: #ebf9f4; }
+
+.scope-panel { margin-bottom: 12px; overflow: hidden; }
+.scope-controls { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(150px, 220px) minmax(150px, 220px); gap: 14px; align-items: end; padding: 14px; }
+.scope-controls h2 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -.02em; }
+.scope-controls p:last-child { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+.scope-controls label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.scope-controls select { width: 100%; height: 36px; padding: 0 32px 0 10px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--ink); background: white; }
+.scope-controls select:disabled { color: #8b9aa6; background: #f3f6f8; }
+.node-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 12px 14px 14px; border-top: 1px solid var(--line); background: #f8fafc; }
+.node-group { min-width: 0; }
+.node-group h3 { margin: 0 0 7px; color: #496274; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.node-list { display: grid; gap: 6px; }
+.node-card { position: relative; display: grid; gap: 1px; width: 100%; padding: 9px 10px 9px 22px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: white; text-align: left; cursor: pointer; }
+.node-card::before { content: ""; position: absolute; top: 13px; left: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.node-card:hover, .node-card.selected { border-color: var(--blue); background: var(--blue-soft); }
+.node-card.stale::before { background: var(--amber); }
+.node-card.unavailable::before { background: var(--red); }
+.node-card strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.node-card span { color: #496274; font-size: 9px; font-weight: 700; }
+.node-card small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.node-empty { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 10px; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
 .metric-card { min-width: 0; min-height: 100px; display: flex; gap: 13px; align-items: center; padding: 15px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 3px 12px rgba(20,54,78,.035); }
@@ -230,6 +251,8 @@ tbody tr.selected { background: #e5f4fb; }
   .connection-form input, .connection-form label:nth-child(2) input { width: 100%; }
   .connection-state { margin-left: 0; margin-right: auto; }
   .visual-grid { grid-template-columns: 1fr; }
+  .scope-controls { grid-template-columns: 1fr 1fr; }
+  .scope-controls > div { grid-column: 1 / -1; }
 }
 @media (max-width: 620px) {
   .sidebar { overflow: hidden; }
@@ -245,6 +268,8 @@ tbody tr.selected { background: #e5f4fb; }
   .hero { align-items: start; }
   .updated { display: none; }
   .metric-grid { grid-template-columns: 1fr; }
+  .scope-controls { grid-template-columns: 1fr; }
+  .scope-controls > div { grid-column: auto; }
   .metric-card { min-height: 84px; }
   .pipeline { grid-template-columns: 1fr; }
   .pipeline li:not(:last-child)::after { content: "⌄"; left: 50%; right: auto; top: auto; bottom: -20px; }

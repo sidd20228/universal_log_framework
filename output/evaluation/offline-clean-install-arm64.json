@@ -1,0 +1,24 @@
+{
+  "architecture": "arm64",
+  "archive_sha256": "ea5e65bc63ea25a44009ced183f95a010d16fc18a68e9f3cbbade5909faf9564",
+  "checks": {
+    "dashboard": true,
+    "ingest": true,
+    "query": true,
+    "restart_persistence": true,
+    "signature": true
+  },
+  "contract_version": "ulpf-offline-install-proof/1",
+  "controls": {
+    "clean_release_tags": true,
+    "container_egress_denied": true,
+    "pull_policy_never": true
+  },
+  "finished_at": "2026-09-29T13:12:16Z",
+  "image_ids": [
+    "sha256:a3b420cf59bed0541044f7de2e3d6c8ef6a844114cc6d997ec1207cbc7e81249",
+    "sha256:d7fa4abffc6f0eb6a5ac91aa6bc7412eb6d4e206698819530524e41e6bb1daab"
+  ],
+  "receipt_id": "01a0ed4b-4e58-73d2-8bd4-1bcf08e27695",
+  "started_at": "2026-09-29T13:11:50Z"
+}

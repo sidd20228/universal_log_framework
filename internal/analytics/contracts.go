@@ -177,10 +177,23 @@ type FeatureSetReference struct {
 }
 
 type DatasetSelection struct {
-	ReceivedFrom time.Time                    `json:"received_from"`
-	ReceivedTo   time.Time                    `json:"received_to"`
-	Statuses     []model.InterpretationStatus `json:"statuses"`
+	ReceivedFrom       time.Time                    `json:"received_from"`
+	ReceivedTo         time.Time                    `json:"received_to"`
+	Statuses           []model.InterpretationStatus `json:"statuses"`
+	PartialEventPolicy PartialEventPolicy           `json:"partial_event_policy"`
 }
+
+type PartialEventPolicy string
+
+const (
+	// PartialInclude retains selected PARTIALLY_PARSED revisions and represents
+	// nullable missing features as null.
+	PartialInclude PartialEventPolicy = "include"
+	// PartialExclude omits PARTIALLY_PARSED revisions from the immutable set.
+	PartialExclude PartialEventPolicy = "exclude"
+	// PartialReject aborts export if the selected interval contains one.
+	PartialReject PartialEventPolicy = "reject"
+)
 
 type RevisionSet struct {
 	Count  int64  `json:"count"`
@@ -278,6 +291,9 @@ func (selection DatasetSelection) validate() error {
 	}
 	if len(selection.Statuses) == 0 {
 		return errors.New("at least one interpretation status is required")
+	}
+	if selection.PartialEventPolicy != PartialInclude && selection.PartialEventPolicy != PartialExclude && selection.PartialEventPolicy != PartialReject {
+		return errors.New("partial_event_policy must be include, exclude, or reject")
 	}
 	previous := ""
 	for _, status := range selection.Statuses {

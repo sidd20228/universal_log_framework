@@ -15,9 +15,10 @@ import tarfile
 import tempfile
 
 
-MANIFEST_VERSION = "ulpf-offline-bundle/1.1.0"
+MANIFEST_VERSION = "ulpf-offline-bundle/1.2.0"
 REQUIRED_IMAGES = ("ulpf", "clickhouse")
-OPTIONAL_ROLES = {"sbom", "vulnerability_report", "notice", "signature"}
+OPTIONAL_ROLES = {"sbom", "vulnerability_report", "license_inventory", "notice"}
+REQUIRED_RELEASE_ROLES = {"sbom", "vulnerability_report", "license_inventory"}
 VERSION_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$")
 COMMIT_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|unknown)$")
 IMAGE_TAG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})$")
@@ -113,8 +114,11 @@ def inspect_docker_image(path, architecture, role, version):
         if set(entry) != {"Config", "RepoTags", "Layers"}:
             fail(f"image.{role} manifest entry has missing or unknown fields")
         config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
-        if not isinstance(config_name, str) or not re.fullmatch(r"[0-9a-f]{64}\.json", config_name):
+        legacy_config = re.fullmatch(r"([0-9a-f]{64})\.json", config_name) if isinstance(config_name, str) else None
+        oci_config = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", config_name) if isinstance(config_name, str) else None
+        if legacy_config is None and oci_config is None:
             fail(f"image.{role} has an invalid content-addressed config path")
+        config_digest = (legacy_config or oci_config).group(1)
         if not isinstance(tags, list) or len(tags) != 1:
             fail(f"image.{role} must contain exactly one repository tag")
         tag = validate_image_tag(role, tags[0], version)
@@ -124,7 +128,7 @@ def inspect_docker_image(path, architecture, role, version):
         if config_member is None or not config_member.isreg() or config_member.size > MAX_IMAGE_JSON_BYTES:
             fail(f"image.{role} config is missing or too large")
         config_body = archive.extractfile(config_member).read()
-        if hashlib.sha256(config_body).hexdigest() != config_name[:-5]:
+        if hashlib.sha256(config_body).hexdigest() != config_digest:
             fail(f"image.{role} config digest does not match its filename")
         config = decode_json(config_body, f"image.{role} config")
         if not isinstance(config, dict) or config.get("os") != "linux" or config.get("architecture") != architecture:
@@ -356,6 +360,53 @@ def compress_zstd(source, target):
         fail("zstd compression failed")
 
 
+def public_key_id(public_key):
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        fail("openssl is required to sign a release bundle")
+    result = subprocess.run(
+        [openssl, "pkey", "-pubin", "-in", str(public_key), "-outform", "DER"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        fail("signing public key is not a valid PEM public key")
+    return "sha256:" + hashlib.sha256(result.stdout).hexdigest()
+
+
+def write_signature(archive, digest, private_key, public_key, signed_at, expires_at, epoch):
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        fail("openssl is required to sign a release bundle")
+    statement_path = Path(str(archive) + ".signature.json")
+    signature_path = Path(str(archive) + ".signature.sig")
+    for path in (statement_path, signature_path):
+        if path.exists() or path.is_symlink():
+            fail(f"signature output already exists: {path}")
+    statement = {
+        "algorithm": "rsa-pkcs1v15-sha256",
+        "archive_name": archive.name,
+        "archive_sha256": digest,
+        "expires_at": expires_at,
+        "key_id": public_key_id(public_key),
+        "schema_version": "ulpf-offline-signature/1",
+        "signed_at": signed_at,
+    }
+    body = (json.dumps(statement, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    statement_path.write_bytes(body)
+    result = subprocess.run(
+        [openssl, "dgst", "-sha256", "-sign", str(private_key), "-out", str(signature_path), str(statement_path)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode != 0:
+        statement_path.unlink(missing_ok=True)
+        signature_path.unlink(missing_ok=True)
+        fail("failed to create detached release signature")
+    for path in (statement_path, signature_path):
+        os.chmod(path, 0o644)
+        os.utime(path, (epoch, epoch), follow_symlinks=False)
+    return statement_path, signature_path
+
+
 def parse_arguments():
     script_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -374,7 +425,14 @@ def parse_arguments():
     parser.add_argument("--image-ref", action="append", default=[], metavar="NAME=REFERENCE")
     parser.add_argument(
         "--artifact", action="append", default=[], metavar="ROLE:DESTINATION=FILE",
-        help="add an optional sbom, vulnerability_report, notice, or signature artifact",
+        help="add an sbom, vulnerability_report, license_inventory, or notice artifact",
+    )
+    parser.add_argument("--signing-key", help="PEM RSA private key used only for the detached release statement")
+    parser.add_argument("--signing-public-key", help="separately distributed PEM public key matching --signing-key")
+    parser.add_argument("--signature-expires-at", help="UTC RFC3339-seconds expiry for the detached signature")
+    parser.add_argument(
+        "--unsigned-test-bundle", action="store_true",
+        help="omit publisher signature only for repository fixtures; never use for a release",
     )
     parser.add_argument("--docs-root", default=str(script_root / "docs"))
     parser.add_argument("--schemas-root", default=str(script_root / "schemas"))
@@ -392,12 +450,27 @@ def main():
         fail("source commit must be 40 lowercase hexadecimal characters or 'unknown'")
     if args.source_date_epoch < 0:
         fail("source date epoch cannot be negative")
+    signed_at = dt.datetime.fromtimestamp(args.source_date_epoch, tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    signing_values = (args.signing_key, args.signing_public_key, args.signature_expires_at)
+    if args.unsigned_test_bundle:
+        if any(signing_values):
+            fail("--unsigned-test-bundle cannot be combined with signing options")
+    elif not all(signing_values):
+        fail("release bundles require --signing-key, --signing-public-key, and --signature-expires-at")
+    if args.signature_expires_at:
+        try:
+            expires = dt.datetime.strptime(args.signature_expires_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            fail("--signature-expires-at must use UTC RFC3339 seconds")
+        if expires <= dt.datetime.fromtimestamp(args.source_date_epoch, tz=dt.timezone.utc):
+            fail("signature expiry must be later than the signing time")
     output = Path(os.path.abspath(os.path.expanduser(args.output)))
     if not (output.name.endswith(".tar") or output.name.endswith(".tar.zst")):
         fail("output must end in .tar or .tar.zst")
     output.parent.mkdir(parents=True, exist_ok=True)
     sidecar_path = Path(str(output) + ".sha256")
-    if output.exists() or output.is_symlink() or sidecar_path.exists() or sidecar_path.is_symlink():
+    signature_outputs = (Path(str(output) + ".signature.json"), Path(str(output) + ".signature.sig"))
+    if output.exists() or output.is_symlink() or sidecar_path.exists() or sidecar_path.is_symlink() or any(path.exists() or path.is_symlink() for path in signature_outputs):
         fail(f"output already exists: {output}")
 
     images = {}
@@ -437,6 +510,10 @@ def main():
         for value in args.artifact:
             role, destination, source = parse_artifact(value)
             assembly.add_file(source, destination, role)
+        present_release_roles = {item["role"] for item in assembly.artifacts.values()}
+        missing_release_roles = sorted(REQUIRED_RELEASE_ROLES - present_release_roles)
+        if missing_release_roles:
+            fail(f"release artifact inventory is missing required roles: {missing_release_roles}")
 
         engine = None
         image_tags = {}
@@ -467,7 +544,8 @@ def main():
             },
             "required_roles": [
                 "image.ulpf", "image.clickhouse", "compose", "config", "migration.clickhouse",
-                "documentation", "license", "schema", "verifier",
+                "documentation", "license", "schema", "verifier", "sbom",
+                "vulnerability_report", "license_inventory",
             ],
             "artifacts": [assembly.artifacts[path] for path in sorted(assembly.artifacts)],
         }
@@ -495,9 +573,21 @@ def main():
         os.chmod(sidecar, 0o644)
         os.utime(sidecar, (args.source_date_epoch, args.source_date_epoch), follow_symlinks=False)
 
+        if not args.unsigned_test_bundle:
+            statement_path, signature_path = write_signature(
+                output, archive_digest, regular_source(args.signing_key, "signing private key"),
+                regular_source(args.signing_public_key, "signing public key"), signed_at,
+                args.signature_expires_at, args.source_date_epoch,
+            )
+
         verifier = Path(__file__).resolve().with_name("verify-offline-bundle.py")
+        verification_command = [sys.executable, str(verifier), str(output)]
+        if args.unsigned_test_bundle:
+            verification_command.append("--test-mode")
+        else:
+            verification_command.extend(["--trusted-public-key", args.signing_public_key])
         verified = subprocess.run(
-            [sys.executable, str(verifier), str(output)],
+            verification_command,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
@@ -506,6 +596,8 @@ def main():
         if verified.returncode != 0:
             output.unlink(missing_ok=True)
             sidecar.unlink(missing_ok=True)
+            for path in signature_outputs:
+                path.unlink(missing_ok=True)
             detail = verified.stderr.strip() or "verification failed without diagnostics"
             fail(f"assembled archive did not pass verification: {detail}")
 

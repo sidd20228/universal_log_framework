@@ -92,12 +92,21 @@ job, created, err := bundles.ScheduleReprocess(
 
 The request is idempotent for `(receipt_id, pipeline_version, bundle_digest)`.
 A worker leases it with `ClaimReprocess`, reads the original receipt and raw
-evidence, then calls `CommitReprocess` with a revision whose receipt, pipeline,
-and parser bundle digest match the job. `ReleaseReprocess` either queues a
+evidence, then calls `CommitReprocess` with a revision and its complete
+validated envelope. The receipt, pipeline, and parser bundle digest must match
+the job. `ReleaseReprocess` either queues a
 retry or records a terminal failure with a bounded error code.
 
+The server runs the durable executor whenever bundle lifecycle is enabled.
+Attempt counts are persisted with the job, transient processing failures retry
+up to three claims, and expired leases are recovered after a process restart.
+Every attempt reloads the named installed digest and verifies the retained raw
+reference before parsing.
+
 Completion inserts a new immutable processing revision and marks the job
-complete in one SQLite transaction. It does not update the receipt state, raw
+complete in one SQLite transaction. Both `revision_json` and `envelope_json`
+are stored, giving reprocessed output the same query and delivery contract as
+first-pass output. It does not update the receipt state, raw
 reference, raw hash, or earlier revisions. The same accepted occurrence can
 therefore be compared across bundle and pipeline versions without creating a
 new receipt or rewriting evidence.
@@ -107,3 +116,22 @@ The automated onboarding scenario in
 bundle, records an initial revision, installs and activates v2, reprocesses the
 same receipt into a second revision, restarts from durable state, and rolls the
 source profile back to v1.
+
+## Live control API
+
+When bundle lifecycle storage is configured, the runtime exposes authenticated
+control routes:
+
+- `GET /api/v1/admin/bundles` (`config:read`) lists immutable installed bundles.
+- `GET|POST /api/v1/admin/activations` (`config:write`) reads or changes source
+  profile pins. POST accepts `source_profile_id`, `bundle_sha256`, and
+  `expected_revision`; selecting an older digest performs a rollback.
+- `POST /api/v1/admin/reprocess` and
+  `GET /api/v1/admin/reprocess/{job_id}` (`replay:write`) schedule and inspect
+  durable jobs.
+
+Activation compiles the candidate before the durable compare-and-swap. The
+router publishes one complete snapshot atomically, so concurrent receipts see
+the prior snapshot or the new snapshot. A rejected candidate leaves the last
+known-good routes serving traffic. Restart reconstructs and compiles the
+durable pins before readiness.

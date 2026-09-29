@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  native-package:
+    name: Native ${{ matrix.arch }} package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Resolve release identity
+        id: release
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version=${INPUT_VERSION:-${GITHUB_REF_NAME#v}}
+          [[ "$version" =~ ^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$ ]]
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'epoch=%s\n' "$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Verify native runner architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.arch }}:$(uname -m)' in
+            amd64:x86_64|arm64:aarch64|arm64:arm64) ;;
+            *) printf 'runner is not native for requested architecture\n' >&2; exit 1 ;;
+          esac
+      - name: Install release tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes zstd
+      - name: Build native ULPF image
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          EPOCH: ${{ steps.release.outputs.epoch }}
+        run: |
+          docker build \
+            --build-arg VERSION="$VERSION" \
+            --build-arg COMMIT="$GITHUB_SHA" \
+            --build-arg BUILD_DATE="$(date -u -d "@$EPOCH" +%Y-%m-%dT%H:%M:%SZ)" \
+            --tag "ulpf:$VERSION" .
+          docker image inspect "ulpf:$VERSION"
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ulpf:${{ steps.release.outputs.version }}
+          format: spdx-json
+          output-file: reports/ulpf-${{ matrix.arch }}.spdx.json
+      - name: Scan image
+        uses: anchore/scan-action@v7
+        with:
+          image: ulpf:${{ steps.release.outputs.version }}
+          output-format: json
+          output-file: reports/ulpf-${{ matrix.arch }}-vulnerabilities.json
+          severity-cutoff: high
+          fail-build: true
+      - name: Generate dependency inventory
+        run: go list -m -json all > "reports/go-modules-${{ matrix.arch }}.json"
+      - name: Export pinned images
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          mkdir -p release-inputs dist
+          docker save --output "release-inputs/ulpf-${{ matrix.arch }}.tar" "ulpf:$VERSION"
+          docker pull --platform "linux/${{ matrix.arch }}" clickhouse/clickhouse-server:25.3.8.23-alpine
+          docker save --output "release-inputs/clickhouse-${{ matrix.arch }}.tar" clickhouse/clickhouse-server:25.3.8.23-alpine
+      - name: Assemble offline release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          EPOCH: ${{ steps.release.outputs.epoch }}
+          OFFLINE_SIGNING_KEY: ${{ secrets.OFFLINE_SIGNING_KEY }}
+          OFFLINE_SIGNING_PUBLIC_KEY: ${{ secrets.OFFLINE_SIGNING_PUBLIC_KEY }}
+        run: |
+          test -n "$OFFLINE_SIGNING_KEY"
+          test -n "$OFFLINE_SIGNING_PUBLIC_KEY"
+          printf '%s\n' "$OFFLINE_SIGNING_KEY" > release-inputs/signing-key.pem
+          printf '%s\n' "$OFFLINE_SIGNING_PUBLIC_KEY" > release-inputs/signing-public.pem
+          chmod 0600 release-inputs/signing-key.pem
+          expires_at=$(date -u -d "@$((EPOCH + 315576000))" +%Y-%m-%dT%H:%M:%SZ)
+          SOURCE_DATE_EPOCH="$EPOCH" ./scripts/build-offline-bundle.sh \
+            --version "$VERSION" \
+            --arch '${{ matrix.arch }}' \
+            --source-commit "$GITHUB_SHA" \
+            --compose deployments/offline/compose.yaml \
+            --config configs/ulpf.yaml \
+            --clickhouse-migration migrations/clickhouse/001_events.sql \
+            --image "ulpf=release-inputs/ulpf-${{ matrix.arch }}.tar" \
+            --image "clickhouse=release-inputs/clickhouse-${{ matrix.arch }}.tar" \
+            --signing-key release-inputs/signing-key.pem \
+            --signing-public-key release-inputs/signing-public.pem \
+            --signature-expires-at "$expires_at" \
+            --artifact "sbom:reports/ulpf-${{ matrix.arch }}.spdx.json=reports/ulpf-${{ matrix.arch }}.spdx.json" \
+            --artifact "vulnerability_report:reports/ulpf-${{ matrix.arch }}-vulnerabilities.json=reports/ulpf-${{ matrix.arch }}-vulnerabilities.json" \
+            --artifact "license_inventory:reports/go-modules-${{ matrix.arch }}.json=reports/go-modules-${{ matrix.arch }}.json" \
+            --output "dist/ulpf-offline-$VERSION-${{ matrix.arch }}.tar.zst"
+      - name: Test clean offline installation
+        env:
+          ULPF_API_TOKEN: release-test-token-000000000000000000000001
+          CLICKHOUSE_PASSWORD: release-test-clickhouse-000000000000000001
+          ULPF_OFFLINE_EVIDENCE_PATH: dist/offline-clean-install-${{ matrix.arch }}.json
+        run: ./scripts/test-offline-install.sh "dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst" release-inputs/signing-public.pem
+      - name: Attest offline release provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst
+            dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst.signature.json
+            dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst.signature.sig
+            dist/offline-clean-install-${{ matrix.arch }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: native-package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ulpf-offline-*
+          path: dist
+          merge-multiple: true
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes dist/*

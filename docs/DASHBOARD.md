@@ -28,9 +28,11 @@ update.
 - readiness and the Frame → Admit → Interpret → Commit → Deliver flow;
 - accepted and committed activity in twelve five-minute buckets;
 - interpretation status distribution;
-- the twenty newest committed events for the selected tenant; and
+- the twenty newest committed events for the selected tenant;
 - connector pending, failed, and delivered counts;
-- local and configured peer-node freshness and availability; and
+- local and configured peer-node freshness and availability;
+- environment and instance groups with filters that recompute totals, activity,
+  status, pipeline stages, and recent events for the selected origins; and
 - receipt, raw-evidence metadata, processing revision, canonical fields,
   origin identity, and provenance counts in the trace inspector.
 
@@ -50,9 +52,27 @@ peers are configured, the server queries them concurrently with bounded
 timeouts, combines tenant-scoped totals/activity/recent events, preserves each
 event's environment and instance origin, and reports unavailable or stale
 nodes explicitly. Cross-node trace requests use a same-origin server proxy;
-peer credentials are never returned to the browser. Delivery totals come from
-the durable per-connector queue. Event-list and trace APIs may use ClickHouse
-when it is selected as the runtime query backend.
+peer endpoints and credentials remain in server configuration and are never
+returned to the browser. The browser receives only same-origin trace paths.
+Delivery totals come from the durable per-connector queue. Event-list and
+trace APIs may use ClickHouse when it is selected as the runtime query backend.
+
+The coordinator retains one successful summary per configured peer in memory.
+If that peer stops or times out, its last totals and recent metadata remain in
+the combined and filtered views while its node and origin are marked
+**Unavailable · last known retained**. `last_seen_at` records the successful
+observation time and `generated_at` records the peer snapshot time. The cache
+is tenant-bound, never reused across tenants, replaced on the next successful
+read, and cleared when the coordinator restarts. A peer with no cached success
+appears unavailable and contributes no data.
+
+Federation is explicitly bounded to 64 configured peers. Each request has a
+configured timeout of at most 30 seconds and accepts at most 4 MiB of JSON.
+Each direct peer slice may contain at most twelve activity buckets and twenty
+recent events. Peer origin, tenant, counter groups, nonnegative counts, and
+snapshot time are validated before data is merged or retained. A snapshot more
+than two minutes old is marked stale. The coordinator discards transitive node
+and origin lists, so a peer cannot recursively expand a cyclic federation.
 
 This application-level federation is intended for a bounded node set. Large
 installations should use a shared indexed backend and independently qualify

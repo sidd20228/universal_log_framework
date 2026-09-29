@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/auth"
+	"github.com/sidd20228/universal_log_framework/internal/bundleadmin"
 	"github.com/sidd20228/universal_log_framework/internal/bundlecompile"
 	"github.com/sidd20228/universal_log_framework/internal/dashboard"
 	"github.com/sidd20228/universal_log_framework/internal/dashboardapi"
@@ -39,6 +40,7 @@ import (
 	"github.com/sidd20228/universal_log_framework/internal/interpret/xml"
 	"github.com/sidd20228/universal_log_framework/internal/query"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
+	"github.com/sidd20228/universal_log_framework/internal/reprocess"
 	"github.com/sidd20228/universal_log_framework/internal/worker"
 )
 
@@ -93,9 +95,11 @@ type Service struct {
 	workers             []*worker.Worker
 	lifecycle           *registry.Lifecycle
 	router              *bundlecompile.Router
+	reprocess           *reprocess.Executor
 	deliveryStore       *deliver.SQLiteStateStore
 	deliveryCoordinator *deliver.Coordinator
 	connectors          []deliver.Connector
+	deliveryTargets     []deliver.ConnectorTarget
 	connectorClosers    []interface{ Close() error }
 	ready               atomic.Bool
 	closed              atomic.Bool
@@ -156,7 +160,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 		return nil, err
 	}
 	authorizer, err := auth.New([]auth.TokenConfig{{ID: "compose", Actor: "compose-runtime", Secret: config.Token,
-		Scopes: []auth.Scope{auth.ScopeEventsWrite, auth.ScopeEventsRead, auth.ScopeRawRead}, Tenants: []string{config.TenantID}}})
+		Scopes: []auth.Scope{auth.ScopeEventsWrite, auth.ScopeEventsRead, auth.ScopeRawRead, auth.ScopeConfigRead, auth.ScopeConfigWrite, auth.ScopeReplayWrite, auth.ScopeOpsRead}, Tenants: []string{config.TenantID}}})
 	if err != nil {
 		return fail(fmt.Errorf("configure API token: %w", err))
 	}
@@ -188,6 +192,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 		return fail(err)
 	}
 	connectors := make([]deliver.Connector, 0, len(config.Connectors))
+	deliveryTargets := make([]deliver.ConnectorTarget, 0, len(config.Connectors))
 	var connectorClosers []interface{ Close() error }
 	for _, specification := range config.Connectors {
 		connector, closer, buildErr := buildConnector(specification)
@@ -195,6 +200,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 			return fail(buildErr)
 		}
 		connectors = append(connectors, connector)
+		deliveryTargets = append(deliveryTargets, deliver.ConnectorTarget{Connector: connector, Required: specification.Required})
 		if closer != nil {
 			connectorClosers = append(connectorClosers, closer)
 		}
@@ -262,7 +268,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 			}
 			current := lifecycle.ActivationSnapshot()
 			if active, found := current.Resolve(source.SourceProfileID); !found || active.BundleDigest != installed.Digest {
-				if _, activateErr := lifecycle.Activate(ctx, source.SourceProfileID, installed.Digest, current.ConfigRevision(), "runtime-config"); activateErr != nil {
+				if _, activateErr := router.Activate(ctx, lifecycle, source.SourceProfileID, installed.Digest, current.ConfigRevision(), "runtime-config"); activateErr != nil {
 					return fail(fmt.Errorf("activate source bundle %q: %w", source.SourceProfileID, activateErr))
 				}
 			}
@@ -280,8 +286,21 @@ func New(ctx context.Context, config Config) (*Service, error) {
 			return fail(err)
 		}
 	}
+	var reprocessExecutor *reprocess.Executor
+	if lifecycle != nil {
+		reprocessExecutor, err = reprocess.New(reprocess.Config{Owner: "serve-reprocess-" + strconv.Itoa(os.Getpid()), LeaseDuration: 30 * time.Second,
+			ProcessingTimeout: config.ProcessingTimeout, MaxEvidenceBytes: int(config.MaxEventBytes)}, lifecycle, queue, raw)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	service := &Service{config: config, inbox: queue, dashboard: dashboardReader, raw: raw, workers: workers, lifecycle: lifecycle, router: router,
-		deliveryStore: deliveryStore, deliveryCoordinator: deliveryCoordinator, connectors: connectors, connectorClosers: connectorClosers}
+		reprocess:     reprocessExecutor,
+		deliveryStore: deliveryStore, deliveryCoordinator: deliveryCoordinator, connectors: connectors, deliveryTargets: deliveryTargets, connectorClosers: connectorClosers}
+	deliveryOps, err := deliver.NewOpsHTTP(deliveryStore, config.TenantID)
+	if err != nil {
+		return fail(err)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/health/live", http.HandlerFunc(service.live))
 	mux.Handle("/health/ready", http.HandlerFunc(service.readiness))
@@ -289,6 +308,21 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	mux.Handle("/dashboard/", dashboard.Handler())
 	mux.Handle("/api/v1/ingest", auth.RequireHTTP(authorizer, auth.ScopeEventsWrite, func(*http.Request) string { return config.TenantID }, admission))
 	mux.Handle("/api/v1/dashboard/summary", dashboardHTTP)
+	tenantFromQuery := func(request *http.Request) string { return request.URL.Query().Get("tenant_id") }
+	mux.Handle("/api/v1/connectors/status", auth.RequireHTTP(authorizer, auth.ScopeOpsRead, tenantFromQuery, http.HandlerFunc(deliveryOps.Status)))
+	mux.Handle("/api/v1/connectors/dlq", auth.RequireHTTP(authorizer, auth.ScopeOpsRead, tenantFromQuery, http.HandlerFunc(deliveryOps.DLQ)))
+	mux.Handle("/api/v1/connectors/", auth.RequireHTTP(authorizer, auth.ScopeReplayWrite, tenantFromQuery, http.HandlerFunc(deliveryOps.Replay)))
+	if lifecycle != nil {
+		admin, adminErr := bundleadmin.New(lifecycle, router, config.TenantID, queue)
+		if adminErr != nil {
+			return fail(adminErr)
+		}
+		tenant := func(*http.Request) string { return config.TenantID }
+		mux.Handle("/api/v1/admin/bundles", auth.RequireHTTP(authorizer, auth.ScopeConfigRead, tenant, http.HandlerFunc(admin.Bundles)))
+		mux.Handle("/api/v1/admin/activations", auth.RequireHTTP(authorizer, auth.ScopeConfigWrite, tenant, http.HandlerFunc(admin.Activations)))
+		mux.Handle("/api/v1/admin/reprocess", auth.RequireHTTP(authorizer, auth.ScopeReplayWrite, tenant, http.HandlerFunc(admin.Reprocess)))
+		mux.Handle("/api/v1/admin/reprocess/", auth.RequireHTTP(authorizer, auth.ScopeReplayWrite, tenant, http.HandlerFunc(admin.Reprocess)))
+	}
 	if len(config.FederationPeers) != 0 {
 		federationProxy, proxyErr := dashboardapi.NewFederationProxyHandler(authorizer, config.TenantID, config.FederationPeers)
 		if proxyErr != nil {
@@ -316,6 +350,13 @@ func (service *Service) Serve(ctx context.Context, listener net.Listener) error 
 			defer workers.Done()
 			service.runWorker(ctx, processor)
 		}(processor)
+	}
+	if service.reprocess != nil {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			service.runReprocess(ctx)
+		}()
 	}
 	if len(service.connectors) != 0 {
 		workers.Add(1)
@@ -358,6 +399,22 @@ func (service *Service) Serve(ctx context.Context, listener net.Listener) error 
 	}
 }
 
+func (service *Service) runReprocess(ctx context.Context) {
+	for ctx.Err() == nil {
+		step, err := service.reprocess.RunOnce(ctx)
+		if err == nil && step.Outcome != worker.OutcomeNoWork {
+			continue
+		}
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
 func (service *Service) runWorker(ctx context.Context, processor *worker.Worker) {
 	for ctx.Err() == nil {
 		step, err := processor.RunOnce(ctx)
@@ -388,9 +445,7 @@ func (service *Service) runDeliveryReconciler(ctx context.Context) {
 				if projectErr != nil {
 					continue
 				}
-				for _, connector := range service.connectors {
-					_ = service.deliveryCoordinator.Enqueue(ctx, connector, []deliver.ExportRecord{record}, time.Now().UTC())
-				}
+				_ = service.deliveryCoordinator.EnqueueAll(ctx, service.deliveryTargets, []deliver.ExportRecord{record}, time.Now().UTC())
 				cursorTime, cursorReceipt, cursorRevision = value.Receipt.ReceivedAt, value.Receipt.ID, value.Processing.RevisionID
 			}
 			if len(values) < 200 {
@@ -492,6 +547,18 @@ func (service *Service) readiness(writer http.ResponseWriter, request *http.Requ
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = writer.Write([]byte("{\"status\":\"not_ready\"}\n"))
 		return
+	}
+	healthContext, cancel := context.WithTimeout(request.Context(), 2*time.Second)
+	defer cancel()
+	for _, target := range service.deliveryTargets {
+		if !target.Required {
+			continue
+		}
+		if health := target.Connector.Health(healthContext); !health.Healthy {
+			writer.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = writer.Write([]byte("{\"status\":\"not_ready\",\"code\":\"REQUIRED_DEPENDENCY_UNAVAILABLE\"}\n"))
+			return
+		}
 	}
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write([]byte("{\"status\":\"ready\"}\n"))

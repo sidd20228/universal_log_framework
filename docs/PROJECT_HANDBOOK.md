@@ -143,8 +143,12 @@ ulpf bundle activate --sqlite /var/lib/ulpf/state/ulpf.sqlite \
 ```
 
 Configured bundle directories are installed, semantically compiled, activated,
-and reconstructed at startup. The runtime router atomically selects the active
-compiled detector and mapper by the trusted receipt source profile. Unconfigured
+and reconstructed at startup. Authenticated control endpoints list bundles and
+activations, perform compile-before-CAS live activation or rollback, and
+schedule/status durable reprocessing. The executor reloads the exact installed
+digest, verifies retained evidence, and atomically stores a complete new
+immutable envelope; retries survive restart. The runtime router selects its
+atomic compiled snapshot by trusted receipt source profile while unconfigured
 profiles use the built-in syntax fallback.
 
 ## APIs and traceability
@@ -167,6 +171,11 @@ reconciler projects all committed envelopes and idempotently admits each
 revision to every connector. Connector workers use bounded batches, leases,
 retry with backoff, circuit cooldown, permanent-failure dead letters, and
 graceful cancellation.
+
+Tenant-scoped authenticated operations endpoints expose connector status,
+dead-letter metadata, and replay. Required connectors gate receipt delivery
+state; optional failures remain visible and replayable without blocking the
+receipt.
 
 Supported destinations are:
 
@@ -195,9 +204,12 @@ The versioned contracts are:
 
 Go validation rejects raw-data feature paths, duplicate or unordered features,
 unsafe artifact paths, invalid splits, missing lineage, and mismatched dataset
-identity. The project produces governed analytics artifacts; model training,
-model quality claims, embeddings, inference, and a model registry are outside
-the runtime.
+identity. `ulpf dataset export` reads one tenant, applies an explicit
+include/exclude/reject policy for partial events, orders revisions stably,
+derives SHA-256 train/validation/test splits, extracts typed features, and
+publishes immutable Parquet plus its manifest idempotently. The project produces
+governed analytics artifacts; model training, model quality claims, embeddings,
+inference, and a model registry are outside the runtime.
 
 ## Dashboard and federation
 
@@ -208,8 +220,10 @@ counts, and trace metadata. It displays event environment and instance origin.
 Configured federation peers are queried concurrently with individual timeouts.
 Totals and activity are aggregated, recent events retain their origin, and
 unavailable or stale nodes remain visible instead of appearing as zero
-activity. Cross-node receipt and event traces pass through an authenticated
-local proxy.
+activity. A bounded tenant-specific last-known cache retains the previous peer
+summary during outage. Operators can filter and recompute the dashboard by
+environment and instance. Cross-node receipt and event traces pass through an
+authenticated local proxy.
 
 This is bounded application-level federation. Large deployments should use a
 shared ClickHouse cluster and qualify its replication, availability, and data
@@ -237,16 +251,20 @@ token.
 ## Air-gapped installation
 
 The offline builder emits architecture-specific image archives, image-only
-Compose with `pull_policy: never`, migrations, schemas, documentation, inventory,
-and checksums. Verification parses Docker-save metadata and validates image tag,
-Linux OS, architecture, config digest, layer inventory, layer digests, Compose
-references, and the outer archive checksum. Release mode requires the sidecar;
-test mode is explicit.
+Compose with `pull_policy: never` and a non-masqueraded Docker bridge,
+migrations, schemas, documentation, required
+SBOM/vulnerability/license inventories, and checksums. It signs an expiring
+statement that binds the outer archive digest to a publisher key. Verification
+uses a separately provisioned public key and revocation list, then validates
+image tag, Linux OS, architecture, config digest, layers, Compose references,
+and all checksum layers. Test mode is explicit and cannot approve a release.
 
-See [`docs/OFFLINE_INSTALL.md`](OFFLINE_INSTALL.md). The package mechanics are
-tested locally. A release-ready claim still requires a clean native amd64 and
-arm64 target, no cached images, independently enforced egress denial, and
-recorded start/ingest/query/restart evidence.
+See [`docs/OFFLINE_INSTALL.md`](OFFLINE_INSTALL.md). A clean local arm64 engine
+removed the release tags, loaded only the signed archives, verified Docker's
+egress control and a rejected external probe, and passed start, authenticated
+ingest/query/dashboard, and restart persistence with pulls disabled. Native
+amd64 evidence remains required for a multi-architecture air-gapped release
+claim.
 
 ## Operations
 

@@ -1,6 +1,6 @@
 ULPF evaluation verification
-generated_at=2026-09-29T12:30:59Z
-git_commit=a63d133812d47d6822c011979ea54b1c6f954f44
+generated_at=2026-09-29T13:12:25Z
+git_commit=cea926bc3ad3dfe56944516112f139b4cf93499f
 git_dirty=true
 PASS  T01 ADRs and acceptance contract
 PASS  T02 vendored OCSF provenance and checksums
@@ -18,16 +18,19 @@ PASS  T38 two successful demo rehearsals within 120 seconds
 PASS  T39 editable five-slide presentation
 PASS  T40 trace document, expected outcomes, and verifier
 PASS  T41 dynamic dashboard frontend, API, guide, and design reference
+PASS  T42-T53 completed runtime slices and handbook
+PASS  Native arm64 offline clean-install evidence
 PASS  T37 architecture PDF has exactly two pages
 PASS  T39 presentation contains exactly five slides
 PASS  T35 report accounting, claim boundary, and profile digests
-ok  	github.com/sidd20228/universal_log_framework/cmd/ulpf	0.830s
+ok  	github.com/sidd20228/universal_log_framework/cmd/ulpf	(cached)
 ?   	github.com/sidd20228/universal_log_framework/cmd/ulpf-benchgen	[no test files]
 ?   	github.com/sidd20228/universal_log_framework/cmd/ulpf-benchmark	[no test files]
 ok  	github.com/sidd20228/universal_log_framework/internal/analytics	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/auth	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/benchgen	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/benchrun	(cached)
+?   	github.com/sidd20228/universal_log_framework/internal/bundleadmin	[no test files]
 ok  	github.com/sidd20228/universal_log_framework/internal/bundlecompile	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/control	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/dashboard	(cached)
@@ -55,8 +58,9 @@ ok  	github.com/sidd20228/universal_log_framework/internal/model	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/observe	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/query	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/registry	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/reprocess	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/securitytest	(cached)
-ok  	github.com/sidd20228/universal_log_framework/internal/server	1.722s
+ok  	github.com/sidd20228/universal_log_framework/internal/server	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/worker	(cached)
 ?   	github.com/sidd20228/universal_log_framework/migrations/sqlite	[no test files]
 ok  	github.com/sidd20228/universal_log_framework/tests/e2e	(cached)
@@ -67,10 +71,10 @@ ok  	github.com/sidd20228/universal_log_framework/internal/inbox	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/ingress	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/worker	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/deliver	(cached)
-ok  	github.com/sidd20228/universal_log_framework/internal/query	2.690s
+ok  	github.com/sidd20228/universal_log_framework/internal/query	(cached)
 ok  	github.com/sidd20228/universal_log_framework/internal/dashboard	(cached)
-ok  	github.com/sidd20228/universal_log_framework/internal/dashboardapi	1.776s
-ok  	github.com/sidd20228/universal_log_framework/internal/server	3.499s
+ok  	github.com/sidd20228/universal_log_framework/internal/dashboardapi	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/server	(cached)
 ok  	github.com/sidd20228/universal_log_framework/tests/e2e	(cached)
 PASS  Focused race suite for durable, security, and dashboard boundaries
 PASS  Go vet
@@ -796,11 +800,11 @@ PASS  JSON Schema positive/negative examples
 verified 15 fixture occurrences, 15 raw files, 14 required scenarios, and 1 byte-identical occurrence group
 PASS  Synthetic corpus hashes, coverage, provenance, and ground truth
 go test ./internal/auth ./internal/ingress ./internal/interpret/re2parser ./internal/registry ./internal/securitytest -count=1 -run '^(Fuzz|TestSecurity|TestPermissionMatrix|TestLoaderRejectsTraversalAndSymlinks|TestPathologicalPatternCompletesWithoutBacktracking|TestHTTPRejectsOversizeWithoutDurableWrites|TestUDPListenerRejectsOversizeAndAccountsForTruncation)'
-ok  	github.com/sidd20228/universal_log_framework/internal/auth	0.625s
-ok  	github.com/sidd20228/universal_log_framework/internal/ingress	1.128s
-ok  	github.com/sidd20228/universal_log_framework/internal/interpret/re2parser	2.211s
-ok  	github.com/sidd20228/universal_log_framework/internal/registry	1.654s
-ok  	github.com/sidd20228/universal_log_framework/internal/securitytest	2.731s
+ok  	github.com/sidd20228/universal_log_framework/internal/auth	0.753s
+ok  	github.com/sidd20228/universal_log_framework/internal/ingress	1.261s
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/re2parser	1.746s
+ok  	github.com/sidd20228/universal_log_framework/internal/registry	2.231s
+ok  	github.com/sidd20228/universal_log_framework/internal/securitytest	2.697s
 PASS  Bounded security regression smoke
 container policy: static checks passed
 #0 building with "desktop-linux" instance using docker driver
@@ -809,38 +813,38 @@ container policy: static checks passed
 #1 transferring dockerfile: 1.93kB done
 #1 DONE 0.0s
 
-#2 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#2 [internal] load metadata for docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
 #2 DONE 0.0s
 
-#3 [internal] load metadata for docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
-#3 DONE 0.0s
+#3 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#3 DONE 2.6s
 
 #4 [internal] load .dockerignore
 #4 transferring context: 295B done
 #4 DONE 0.0s
 
-#5 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
-#5 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab done
+#5 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#5 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c 0.0s done
 #5 DONE 0.0s
 
-#6 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
-#6 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c done
+#6 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#6 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab done
 #6 DONE 0.0s
 
 #7 [internal] load build context
-#7 transferring context: 11.38kB 0.0s done
+#7 transferring context: 12.01kB 0.0s done
 #7 DONE 0.0s
 
-#8 [build 4/8] RUN go mod download
+#8 [build 7/8] COPY migrations/ ./migrations/
 #8 CACHED
 
-#9 [build 7/8] COPY migrations/ ./migrations/
+#9 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
 #9 CACHED
 
-#10 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
+#10 [build 2/8] WORKDIR /src
 #10 CACHED
 
-#11 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
+#11 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
 #11 CACHED
 
 #12 [build 5/8] COPY cmd/ ./cmd/
@@ -849,7 +853,7 @@ container policy: static checks passed
 #13 [build 8/8] RUN test -n "arm64" &&     GOOS="linux" GOARCH="arm64"     go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.version=dev -X main.commit=unknown -X main.buildDate=1970-01-01T00:00:00Z"       -o /out/ulpf ./cmd/ulpf &&     install -d -m 0700       /runtime/var/lib/ulpf/raw       /runtime/var/lib/ulpf/state       /runtime/var/lib/ulpf/bundles       /runtime/var/lib/ulpf/tmp
 #13 CACHED
 
-#14 [build 2/8] WORKDIR /src
+#14 [build 4/8] RUN go mod download
 #14 CACHED
 
 #15 [build 6/8] COPY internal/ ./internal/
@@ -858,7 +862,7 @@ container policy: static checks passed
 #16 [build 3/8] COPY go.mod go.sum ./
 #16 CACHED
 
-#17 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
+#17 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
 #17 CACHED
 
 #18 [stage-1 5/5] WORKDIR /var/lib/ulpf
@@ -866,27 +870,27 @@ container policy: static checks passed
 
 #19 exporting to image
 #19 exporting layers done
-#19 exporting manifest sha256:38321426516f49a63ecf5571d8a87a6142fe391eecb415ca8163151bcaef57b8 done
-#19 exporting config sha256:25a1cfff677b71b7796825e575b5040c5d6569b25116373a34493d96f34f7bf7 done
-#19 exporting attestation manifest sha256:870df5290053dda3f0d624f0eddf8a3594494205eb33eecff4e2e3cc53e09bb3 done
-#19 exporting manifest list sha256:65da5ceb4e92fd0e2d89d1add73e9dc498071c08da7464007d5782c0a69dfcb5 done
-#19 naming to docker.io/library/ulpf-container-policy:local-45233 done
-#19 unpacking to docker.io/library/ulpf-container-policy:local-45233 done
+#19 exporting manifest sha256:4f4ad5b38d51c671a23a4ecca8b701b426b3ac47a0c990add067f8d93df7ea11 done
+#19 exporting config sha256:2ddd432e075cf4d5934cde541915813ff44eb75916f4f72db389e31d6878ac06 done
+#19 exporting attestation manifest sha256:fff393e2dc5a938c6c6a97486c1c1ba6292fe0816e41759952d8607c624010bb done
+#19 exporting manifest list sha256:95fe8a7b51d7dac3840abd24e9c504f28bc47501fa387c4e1c45edfb549816bf done
+#19 naming to docker.io/library/ulpf-container-policy:local-76139 done
+#19 unpacking to docker.io/library/ulpf-container-policy:local-76139 done
 #19 DONE 0.0s
 container policy: runtime checks passed with docker
 container policy test: success and rejection cases passed
 PASS  Container static success and rejection policy
-offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/first.tar
-sha256: cda59a56ec260ce283b7997ac94286dbdbf6812e655eb151dec735372efbb60c
-offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/second.tar
-sha256: cda59a56ec260ce283b7997ac94286dbdbf6812e655eb151dec735372efbb60c
-offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
-offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
-offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/first.tar.zst
-sha256: b3aaffa838db1f8ffc33342c8de98cbad13c15cd8c4290858d44b664fbec53a9
-offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/second.tar.zst
-sha256: b3aaffa838db1f8ffc33342c8de98cbad13c15cd8c4290858d44b664fbec53a9
-offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.zjEwH9vNu2/first.tar
+sha256: c56df32e2a7c88511978d9601786af80032eaed2a2696174bb9b74824ba0d6ca
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.zjEwH9vNu2/second.tar
+sha256: c56df32e2a7c88511978d9601786af80032eaed2a2696174bb9b74824ba0d6ca
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=14 sidecar=yes signature=yes
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=14 sidecar=yes signature=yes
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.zjEwH9vNu2/first.tar.zst
+sha256: 37c61035dc474c514c9c12699d57eaaccf122bcfe0f39290a88c6190628eaa35
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.zjEwH9vNu2/second.tar.zst
+sha256: 37c61035dc474c514c9c12699d57eaaccf122bcfe0f39290a88c6190628eaa35
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=14 sidecar=yes signature=yes
 offline bundle tests passed
 PASS  Offline archive determinism and hostile archive rejection
  Image ulpf:local Building
@@ -908,46 +912,46 @@ PASS  Offline archive determinism and hostile archive rejection
 #5 transferring context: 295B done
 #5 DONE 0.0s
 
-#6 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
-#6 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c 0.0s done
+#6 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#6 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab done
 #6 DONE 0.0s
 
-#7 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
-#7 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab 0.0s done
+#7 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#7 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c done
 #7 DONE 0.0s
 
 #8 [internal] load build context
-#8 transferring context: 11.38kB done
+#8 transferring context: 12.01kB done
 #8 DONE 0.0s
 
-#9 [build 5/8] COPY cmd/ ./cmd/
+#9 [build 2/8] WORKDIR /src
 #9 CACHED
 
-#10 [build 6/8] COPY internal/ ./internal/
+#10 [build 4/8] RUN go mod download
 #10 CACHED
 
-#11 [build 8/8] RUN test -n "arm64" &&     GOOS="linux" GOARCH="arm64"     go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.version=dev -X main.commit=unknown -X main.buildDate=1970-01-01T00:00:00Z"       -o /out/ulpf ./cmd/ulpf &&     install -d -m 0700       /runtime/var/lib/ulpf/raw       /runtime/var/lib/ulpf/state       /runtime/var/lib/ulpf/bundles       /runtime/var/lib/ulpf/tmp
+#11 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
 #11 CACHED
 
 #12 [build 7/8] COPY migrations/ ./migrations/
 #12 CACHED
 
-#13 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
+#13 [build 8/8] RUN test -n "arm64" &&     GOOS="linux" GOARCH="arm64"     go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.version=dev -X main.commit=unknown -X main.buildDate=1970-01-01T00:00:00Z"       -o /out/ulpf ./cmd/ulpf &&     install -d -m 0700       /runtime/var/lib/ulpf/raw       /runtime/var/lib/ulpf/state       /runtime/var/lib/ulpf/bundles       /runtime/var/lib/ulpf/tmp
 #13 CACHED
 
-#14 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
+#14 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
 #14 CACHED
 
-#15 [build 3/8] COPY go.mod go.sum ./
+#15 [build 6/8] COPY internal/ ./internal/
 #15 CACHED
 
-#16 [build 2/8] WORKDIR /src
+#16 [build 3/8] COPY go.mod go.sum ./
 #16 CACHED
 
-#17 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
+#17 [build 5/8] COPY cmd/ ./cmd/
 #17 CACHED
 
-#18 [build 4/8] RUN go mod download
+#18 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
 #18 CACHED
 
 #19 [stage-1 5/5] WORKDIR /var/lib/ulpf
@@ -955,10 +959,10 @@ PASS  Offline archive determinism and hostile archive rejection
 
 #20 exporting to image
 #20 exporting layers done
-#20 exporting manifest sha256:09f0e78d1155a50b3479d47065262c96c622d25b2a18d5ce0afa6d98a6c73935 done
-#20 exporting config sha256:34e019caa0ec2baf5cd1997a5281af581b3b5f969a84ac2fcef7df5c7c7fb2e3 done
-#20 exporting attestation manifest sha256:61c4b729d3a14088d0506c7be79eb7490b93ebb402d1044a7b0c2ebd1d8c5413 done
-#20 exporting manifest list sha256:d7fa4abffc6f0eb6a5ac91aa6bc7412eb6d4e206698819530524e41e6bb1daab done
+#20 exporting manifest sha256:92f3c695fd4a7fd59e992f159d64d2ab4db98c5255aed0cd4c4b4bf4c8fd7c19 done
+#20 exporting config sha256:04de3c8498b05674208c750df89550276f4009c462839d57f892aa32818d6d91 done
+#20 exporting attestation manifest sha256:c1f1cb060c6254315ba8b3af417b105a348df7ddd44193af32041fb21247d8d6 done
+#20 exporting manifest list sha256:39b2afef0335f989c554a2e52fa92c8d7534503cad4309fb98cb2208abf5a274 done
 #20 naming to docker.io/library/ulpf:local done
 #20 unpacking to docker.io/library/ulpf:local done
 #20 DONE 0.0s
@@ -966,23 +970,33 @@ PASS  Offline archive determinism and hostile archive rejection
 #21 resolving provenance for metadata file
 #21 DONE 0.0s
  Image ulpf:local Built
- Container ulpf-clickhouse-1 Recreate
- Container ulpf-clickhouse-1 Recreated
- Container ulpf-ulpf-1 Recreate
- Container ulpf-ulpf-1 Recreated
+ Network ulpf_default Creating
+ Network ulpf_default Created
+ Volume ulpf_clickhouse-data Creating
+ Volume ulpf_clickhouse-data Created
+ Volume ulpf_clickhouse-logs Creating
+ Volume ulpf_clickhouse-logs Created
+ Volume ulpf_ulpf-raw Creating
+ Volume ulpf_ulpf-raw Created
+ Volume ulpf_ulpf-state Creating
+ Volume ulpf_ulpf-state Created
+ Container ulpf-clickhouse-1 Creating
+ Container ulpf-clickhouse-1 Created
+ Container ulpf-ulpf-1 Creating
+ Container ulpf-ulpf-1 Created
  Container ulpf-clickhouse-1 Starting
  Container ulpf-clickhouse-1 Started
  Container ulpf-clickhouse-1 Waiting
  Container ulpf-clickhouse-1 Healthy
  Container ulpf-ulpf-1 Starting
  Container ulpf-ulpf-1 Started
- Container ulpf-ulpf-1 Waiting
  Container ulpf-clickhouse-1 Waiting
+ Container ulpf-ulpf-1 Waiting
  Container ulpf-clickhouse-1 Healthy
  Container ulpf-ulpf-1 Healthy
 compose smoke: healthy admission-to-query path verified
 PASS  Docker engine-backed Compose smoke
-LIMIT  No isolated egress-denied target run is recorded; offline evidence covers deterministic assembly, verification, and safe extraction only
-LIMIT  No production-scale, sustained, replicated, Parquet, retention, disk-watermark, or backup/restore result is claimed
-SUMMARY passes=29 failures=0 pending=0 limits=2
+LIMIT  The arm64 clean-install proof is complete; native amd64 clean-install evidence requires the release runner
+LIMIT  No production-scale, sustained, replicated, retention, disk-watermark, or backup/restore result is claimed
+SUMMARY passes=31 failures=0 pending=0 limits=2
 report=output/evaluation/verification.txt

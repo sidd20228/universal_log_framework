@@ -2,6 +2,7 @@
 """Verify and optionally extract a ULPF offline release without an engine."""
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import os
@@ -14,17 +15,19 @@ import tarfile
 import tempfile
 
 
-MANIFEST_VERSION = "ulpf-offline-bundle/1.1.0"
+MANIFEST_VERSION = "ulpf-offline-bundle/1.2.0"
 REQUIRED_ROLES = {
     "image.ulpf", "image.clickhouse", "compose", "config", "migration.clickhouse",
-    "documentation", "license", "schema", "verifier",
+    "documentation", "license", "schema", "verifier", "sbom",
+    "vulnerability_report", "license_inventory",
 }
-ALLOWED_ROLES = REQUIRED_ROLES | {"sbom", "vulnerability_report", "notice", "signature"}
+ALLOWED_ROLES = REQUIRED_ROLES | {"notice"}
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 ROOT_PATTERN = re.compile(r"^ulpf-offline-([0-9A-Za-z][0-9A-Za-z.+_-]{0,127})-(amd64|arm64)$")
 MAX_MEMBERS = 200_000
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_JSON_BYTES = 4 * 1024 * 1024
+MAX_IMAGE_METADATA_CACHE_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_BYTES = int(os.environ.get("ULPF_OFFLINE_MAX_ARCHIVE_BYTES", str(32 * 1024 * 1024 * 1024)))
 IMAGE_TAG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})$")
 
@@ -107,6 +110,98 @@ def verify_sidecar(archive_path):
         actual, _ = digest_stream(stream, MAX_ARCHIVE_BYTES)
     if actual != match.group(1):
         fail("archive checksum does not match its sidecar")
+    return True
+
+
+def key_id(public_key):
+    if public_key.is_symlink() or not public_key.is_file() or public_key.stat().st_size > 1024 * 1024:
+        fail("trusted public key must be a bounded regular file")
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        fail("openssl is required to verify the publisher signature")
+    result = subprocess.run(
+        [openssl, "pkey", "-pubin", "-in", str(public_key), "-outform", "DER"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        fail("trusted public key is not a valid PEM public key")
+    return "sha256:" + hashlib.sha256(result.stdout).hexdigest()
+
+
+def revoked_key_ids(path):
+    if path is None:
+        return set()
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+        fail("revoked-key file must be a bounded regular file")
+    try:
+        lines = path.read_text(encoding="ascii").splitlines()
+    except UnicodeDecodeError:
+        fail("revoked-key file must be ASCII")
+    values = set()
+    for line in lines:
+        value = line.strip()
+        if not value or value.startswith("#"):
+            continue
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+            fail("revoked-key file contains an invalid key id")
+        values.add(value)
+    return values
+
+
+def verify_signature(archive_path, public_key, revoked_path, test_mode):
+    statement_path = Path(str(archive_path) + ".signature.json")
+    signature_path = Path(str(archive_path) + ".signature.sig")
+    if public_key is None:
+        if test_mode:
+            return False
+        fail("--trusted-public-key is required for release verification")
+    for path, label, maximum in (
+        (statement_path, "signature statement", 16 * 1024),
+        (signature_path, "detached signature", 64 * 1024),
+    ):
+        if path.is_symlink() or not path.is_file():
+            fail(f"{label} sidecar is required and must be a regular file")
+        if path.stat().st_size == 0 or path.stat().st_size > maximum:
+            fail(f"{label} sidecar has an invalid size")
+    statement = decode_json(statement_path.read_bytes(), "signature statement")
+    expected_keys = {
+        "algorithm", "archive_name", "archive_sha256", "expires_at",
+        "key_id", "schema_version", "signed_at",
+    }
+    if not isinstance(statement, dict) or set(statement) != expected_keys:
+        fail("signature statement has missing or unknown fields")
+    if statement["schema_version"] != "ulpf-offline-signature/1" or statement["algorithm"] != "rsa-pkcs1v15-sha256":
+        fail("signature statement uses an unsupported contract or algorithm")
+    trusted_id = key_id(public_key)
+    if statement["key_id"] != trusted_id:
+        fail("signature statement key id does not match the trusted public key")
+    if trusted_id in revoked_key_ids(revoked_path):
+        fail("trusted publisher key is revoked")
+    if statement["archive_name"] != archive_path.name:
+        fail("signature statement names another archive")
+    if not isinstance(statement["archive_sha256"], str) or not SHA256_PATTERN.fullmatch(statement["archive_sha256"]):
+        fail("signature statement archive digest is invalid")
+    with archive_path.open("rb") as stream:
+        actual_digest, _ = digest_stream(stream, MAX_ARCHIVE_BYTES)
+    if statement["archive_sha256"] != actual_digest:
+        fail("signature statement does not bind the supplied archive")
+    try:
+        signed_at = dt.datetime.strptime(statement["signed_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+        expires_at = dt.datetime.strptime(statement["expires_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    except (TypeError, ValueError):
+        fail("signature validity timestamps must use UTC RFC3339 seconds")
+    now = dt.datetime.now(dt.timezone.utc)
+    if signed_at >= expires_at or signed_at > now + dt.timedelta(minutes=5):
+        fail("signature validity interval is invalid")
+    if expires_at <= now:
+        fail("publisher signature has expired")
+    openssl = shutil.which("openssl")
+    result = subprocess.run(
+        [openssl, "dgst", "-sha256", "-verify", str(public_key), "-signature", str(signature_path), str(statement_path)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    )
+    if result.returncode != 0:
+        fail("publisher signature is invalid")
     return True
 
 
@@ -395,6 +490,7 @@ def verify_image_archive(archive, member, relative, architecture, role, version)
     bodies = {}
     digests = {}
     declared_total = 0
+    metadata_cache_bytes = 0
     try:
         with tarfile.open(fileobj=stream, mode="r|*") as image_archive:
             for index, nested in enumerate(image_archive):
@@ -414,7 +510,15 @@ def verify_image_archive(archive, member, relative, architecture, role, version)
                     if nested_stream is None:
                         fail(f"cannot read container image member {nested_path!r}")
                     digest = hashlib.sha256()
-                    body = bytearray() if nested_path == "manifest.json" or nested_path.endswith(".json") else None
+                    cache_candidate = (
+                        nested_path == "manifest.json"
+                        or nested_path.endswith(".json")
+                        or (nested_path.startswith("blobs/sha256/") and nested.size <= MAX_IMAGE_JSON_BYTES)
+                    )
+                    body = None
+                    if cache_candidate and metadata_cache_bytes + nested.size <= MAX_IMAGE_METADATA_CACHE_BYTES:
+                        body = bytearray()
+                        metadata_cache_bytes += nested.size
                     while True:
                         chunk = nested_stream.read(1024 * 1024)
                         if not chunk:
@@ -439,8 +543,11 @@ def verify_image_archive(archive, member, relative, architecture, role, version)
     if set(entry) != {"Config", "RepoTags", "Layers"}:
         fail(f"container image {role!r} manifest entry has missing or unknown fields")
     config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
-    if not isinstance(config_name, str) or not re.fullmatch(r"[0-9a-f]{64}\.json", config_name):
+    legacy_config = re.fullmatch(r"([0-9a-f]{64})\.json", config_name) if isinstance(config_name, str) else None
+    oci_config = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", config_name) if isinstance(config_name, str) else None
+    if legacy_config is None and oci_config is None:
         fail(f"container image {role!r} has an invalid content-addressed config path")
+    config_digest = (legacy_config or oci_config).group(1)
     if not isinstance(tags, list) or len(tags) != 1:
         fail(f"container image {role!r} must contain exactly one repository tag")
     tag = valid_image_tag(role, tags[0], version)
@@ -449,7 +556,7 @@ def verify_image_archive(archive, member, relative, architecture, role, version)
     config_body = bodies.get(config_name)
     if config_body is None or config_name not in members or not members[config_name].isreg():
         fail(f"container image {role!r} config is missing")
-    if hashlib.sha256(config_body).hexdigest() != config_name[:-5]:
+    if hashlib.sha256(config_body).hexdigest() != config_digest:
         fail(f"container image {role!r} config digest does not match its filename")
     config = decode_json(config_body, f"container image {role!r} config")
     if not isinstance(config, dict) or config.get("os") != "linux" or config.get("architecture") != architecture:
@@ -527,12 +634,13 @@ def extract_verified(archive, root, members, artifacts, checksums, destination):
             shutil.rmtree(temporary, ignore_errors=True)
 
 
-def verify_archive(archive_path, extract_to=None, test_mode=False):
+def verify_archive(archive_path, extract_to=None, test_mode=False, public_key=None, revoked_path=None):
     if archive_path.is_symlink() or not archive_path.is_file():
         fail("archive must be a regular, non-symlink file")
     sidecar_verified = verify_sidecar(archive_path)
     if not sidecar_verified and not test_mode:
         fail("archive checksum sidecar is required; --test-mode is only for repository fixtures")
+    signature_verified = verify_signature(archive_path, public_key, revoked_path, test_mode)
     with tempfile.TemporaryDirectory(prefix="ulpf-offline-verify-") as temporary:
         tar_path = materialize_tar(archive_path, temporary)
         try:
@@ -555,7 +663,8 @@ def verify_archive(archive_path, extract_to=None, test_mode=False):
                 extract_verified(archive, root, members, artifacts, checksums, extract_to)
     print(
         f"offline bundle verified: version={version} architecture={architecture} "
-        f"artifacts={len(artifacts)} sidecar={'yes' if sidecar_verified else 'no'}"
+        f"artifacts={len(artifacts)} sidecar={'yes' if sidecar_verified else 'no'} "
+        f"signature={'yes' if signature_verified else 'test-mode-skip'}"
     )
 
 
@@ -563,6 +672,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive")
     parser.add_argument("--extract", metavar="DIRECTORY")
+    parser.add_argument("--trusted-public-key", metavar="PEM")
+    parser.add_argument("--revoked-key-file", metavar="FILE")
     parser.add_argument(
         "--test-mode",
         action="store_true",
@@ -572,7 +683,9 @@ def main():
     try:
         archive = Path(os.path.abspath(os.path.expanduser(args.archive)))
         extract_to = Path(os.path.abspath(os.path.expanduser(args.extract))) if args.extract else None
-        verify_archive(archive, extract_to, args.test_mode)
+        public_key = Path(os.path.abspath(os.path.expanduser(args.trusted_public_key))) if args.trusted_public_key else None
+        revoked_path = Path(os.path.abspath(os.path.expanduser(args.revoked_key_file))) if args.revoked_key_file else None
+        verify_archive(archive, extract_to, args.test_mode, public_key, revoked_path)
     except (VerificationError, OSError, tarfile.TarError) as error:
         print(f"offline bundle verification failed: {error}", file=sys.stderr)
         return 1

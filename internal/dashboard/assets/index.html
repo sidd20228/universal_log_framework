@@ -63,6 +63,21 @@
           Connect with a tenant and bearer token to load live event metadata.
         </div>
 
+        <section class="panel scope-panel" id="scope" aria-labelledby="scopeTitle">
+          <div class="scope-controls">
+            <div><p class="eyebrow">FEDERATED VIEW</p><h2 id="scopeTitle">Environment and instance scope</h2><p id="scopeSummary">Connect to load runtime origins.</p></div>
+            <label>Environment
+              <select id="environmentFilter" disabled><option value="">All environments</option></select>
+            </label>
+            <label>Instance
+              <select id="instanceFilter" disabled><option value="">All instances</option></select>
+            </label>
+          </div>
+          <div class="node-groups" id="nodeGroups" aria-live="polite">
+            <p class="node-empty">Node availability will appear after connection.</p>
+          </div>
+        </section>
+
         <section class="metric-grid" aria-label="Pipeline totals">
           <article class="metric-card">
             <span class="metric-icon blue" aria-hidden="true">▤</span>

@@ -27,6 +27,14 @@ services:
       - no-new-privileges:true
     init: true
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 1g
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -57,6 +65,14 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
+    cpus: 4.0
+    mem_limit: 4g
+    pids_limit: 1024
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
       interval: 10s

@@ -109,6 +109,7 @@ func TestDatasetManifestRejectsTamperingAndUnsafePaths(t *testing.T) {
 		{"statuses unordered", func(value *analytics.DatasetManifest) {
 			value.Selection.Statuses = []model.InterpretationStatus{model.StatusUnparsed, model.StatusParsed}
 		}},
+		{"partial policy missing", func(value *analytics.DatasetManifest) { value.Selection.PartialEventPolicy = "" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -164,7 +165,7 @@ func validManifest(t *testing.T) analytics.DatasetManifest {
 		Selection: analytics.DatasetSelection{
 			ReceivedFrom: time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC),
 			ReceivedTo:   time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC),
-			Statuses:     []model.InterpretationStatus{model.StatusParsed, model.StatusUnparsed},
+			Statuses:     []model.InterpretationStatus{model.StatusParsed, model.StatusUnparsed}, PartialEventPolicy: analytics.PartialInclude,
 		},
 		Revisions: analytics.RevisionSet{Count: 2, SHA256: revisionDigest},
 		Split: analytics.SplitPolicy{

@@ -103,3 +103,25 @@ func TestDashboardDoesNotRequestRawPayloads(t *testing.T) {
 		t.Fatal("trace inspector does not explain the raw evidence boundary")
 	}
 }
+
+func TestDashboardIncludesFederatedScopeAndSameOriginTracePaths(t *testing.T) {
+	page, err := fs.ReadFile(embedded, "assets/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, identifier := range []string{`id="environmentFilter"`, `id="instanceFilter"`, `id="nodeGroups"`} {
+		if !strings.Contains(string(page), identifier) {
+			t.Fatalf("dashboard is missing federation control %s", identifier)
+		}
+	}
+	application, err := fs.ReadFile(embedded, "assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(application)
+	for _, behavior := range []string{"aggregateOrigins", "Unavailable · last known retained", "event.event_url", "event.receipt_url", "federatedTracePath"} {
+		if !strings.Contains(script, behavior) {
+			t.Fatalf("dashboard is missing federated behavior %q", behavior)
+		}
+	}
+}

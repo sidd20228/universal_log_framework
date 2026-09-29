@@ -141,6 +141,8 @@ fi
 require_files 'T39 editable five-slide presentation' docs/TECHNICAL_PRESENTATION.md output/presentation/ULPF-Technical-Presentation.pptx
 require_files 'T40 trace document, expected outcomes, and verifier' docs/EVALUATION_TRACE.md docs/EXPECTED_OUTCOMES.md scripts/verify-evaluation.sh
 require_files 'T41 dynamic dashboard frontend, API, guide, and design reference' docs/DASHBOARD.md docs/assets/dashboard-concept.png internal/dashboard/handler.go internal/dashboard/assets/index.html internal/dashboard/assets/styles.css internal/dashboard/assets/app.js internal/dashboardapi/summary.go internal/dashboardapi/http.go
+require_files 'T42-T53 completed runtime slices and handbook' docs/PROJECT_HANDBOOK.md internal/bundlecompile/compiler.go internal/reprocess/executor.go internal/deliver/parquet/connector.go internal/analytics/export.go internal/dashboardapi/federated.go scripts/test-offline-install.sh .github/workflows/release.yml
+require_files 'Native arm64 offline clean-install evidence' output/evaluation/offline-clean-install-arm64.txt output/evaluation/offline-clean-install-arm64.json
 
 if command -v pdfinfo >/dev/null 2>&1; then
   pages=$(pdfinfo output/pdf/ULPF-Architecture-Two-Pager.pdf 2>/dev/null | awk '/^Pages:/ {print $2}')
@@ -209,8 +211,8 @@ else
   limit 'No working Docker/Podman daemon: container runtime and Compose health are unverified'
 fi
 
-limit 'No isolated egress-denied target run is recorded; offline evidence covers deterministic assembly, verification, and safe extraction only'
-limit 'No production-scale, sustained, replicated, Parquet, retention, disk-watermark, or backup/restore result is claimed'
+limit 'The arm64 clean-install proof is complete; native amd64 clean-install evidence requires the release runner'
+limit 'No production-scale, sustained, replicated, retention, disk-watermark, or backup/restore result is claimed'
 
 log "SUMMARY passes=$passes failures=$failures pending=$pending limits=$limits"
 log "report=$report"
