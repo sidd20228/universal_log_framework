@@ -1,0 +1,14 @@
+# Offline release configuration inventory.
+# The current single-process runtime receives these values through the
+# equivalent `ulpf serve` flags in compose.yaml; it does not parse this file.
+config_version: ulpf-config/1
+http:
+  listen: 0.0.0.0:8080
+storage:
+  sqlite: /var/lib/ulpf/state/ulpf.sqlite
+  raw_root: /var/lib/ulpf/raw
+processing:
+  workers: 2
+  tenant: demo
+security:
+  api_token_source: ULPF_API_TOKEN

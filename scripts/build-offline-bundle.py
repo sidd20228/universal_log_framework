@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+"""Assemble a deterministic ULPF offline release archive from fixed inputs."""
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+
+MANIFEST_VERSION = "ulpf-offline-bundle/1.0.0"
+REQUIRED_IMAGES = ("ulpf", "clickhouse", "prometheus")
+OPTIONAL_ROLES = {"sbom", "vulnerability_report", "notice", "signature"}
+VERSION_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$")
+COMMIT_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|unknown)$")
+
+
+def fail(message):
+    raise SystemExit(f"offline bundle build: {message}")
+
+
+def parse_mapping(value, option):
+    if "=" not in value:
+        fail(f"{option} requires NAME=VALUE")
+    name, mapped = value.split("=", 1)
+    if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name) or not mapped:
+        fail(f"invalid {option} value {value!r}")
+    return name, mapped
+
+
+def parse_artifact(value):
+    if "=" not in value or ":" not in value.split("=", 1)[0]:
+        fail("--artifact requires ROLE:DESTINATION=FILE")
+    identity, source = value.split("=", 1)
+    role, destination = identity.split(":", 1)
+    if role not in OPTIONAL_ROLES or not destination or not source:
+        fail(f"invalid --artifact value {value!r}")
+    return role, destination, source
+
+
+def regular_source(path, label):
+    candidate = Path(path)
+    if candidate.is_symlink() or not candidate.is_file():
+        fail(f"{label} must be a regular, non-symlink file: {candidate}")
+    return candidate.resolve()
+
+
+def directory_source(path, label):
+    candidate = Path(path)
+    if candidate.is_symlink() or not candidate.is_dir():
+        fail(f"{label} must be a real directory: {candidate}")
+    return candidate.resolve()
+
+
+def find_engine():
+    for engine in ("docker", "podman"):
+        executable = shutil.which(engine)
+        if executable is None:
+            continue
+        result = subprocess.run(
+            [executable, "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+        )
+        if result.returncode == 0:
+            return executable
+    return None
+
+
+def export_image(engine, reference, target):
+    inspect = subprocess.run(
+        [engine, "image", "inspect", reference],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if inspect.returncode != 0:
+        fail(f"container image is not present locally: {reference}")
+    command = [engine, "save", "--output", str(target), reference]
+    if Path(engine).name == "podman":
+        command = [engine, "save", "--format", "docker-archive", "--output", str(target), reference]
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        fail(f"failed to export container image {reference!r} with {Path(engine).name}")
+
+
+def safe_relative(path):
+    relative = PurePosixPath(path)
+    if relative.is_absolute() or not relative.parts or any(part in ("", ".", "..") for part in relative.parts):
+        fail(f"unsafe destination path {path!r}")
+    return relative
+
+
+class Assembly:
+    def __init__(self, root, epoch):
+        self.root = root
+        self.epoch = epoch
+        self.artifacts = {}
+
+    def add_file(self, source, destination, role, executable=False):
+        source_path = regular_source(source, role)
+        relative = safe_relative(destination)
+        key = relative.as_posix()
+        if key in ("manifest.json", "SHA256SUMS"):
+            fail(f"destination path {key!r} is reserved")
+        if key in self.artifacts:
+            fail(f"duplicate destination path {key!r}")
+        target = self.root.joinpath(*relative.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source_path.open("rb") as reader, target.open("xb") as writer:
+            shutil.copyfileobj(reader, writer, length=1024 * 1024)
+        mode = 0o755 if executable else 0o644
+        os.chmod(target, mode)
+        os.utime(target, (self.epoch, self.epoch), follow_symlinks=False)
+        digest, size = digest_file(target)
+        self.artifacts[key] = {
+            "path": key,
+            "role": role,
+            "sha256": digest,
+            "size_bytes": size,
+            "mode": format(mode, "04o"),
+        }
+
+    def add_tree(self, source, destination, role):
+        source_root = directory_source(source, role)
+        files = []
+        for current, directories, names in os.walk(source_root, followlinks=False):
+            directories.sort()
+            names.sort()
+            current_path = Path(current)
+            for directory in directories:
+                candidate = current_path / directory
+                if candidate.is_symlink():
+                    fail(f"{role} tree contains a symlink: {candidate}")
+            for name in names:
+                candidate = current_path / name
+                if candidate.is_symlink() or not candidate.is_file():
+                    fail(f"{role} tree contains a non-regular file: {candidate}")
+                files.append(candidate)
+        if not files:
+            fail(f"{role} tree must contain at least one file")
+        for source_path in files:
+            relative = source_path.relative_to(source_root).as_posix()
+            self.add_file(source_path, f"{destination}/{relative}", role)
+
+
+def digest_file(path):
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
+def write_bytes(path, body, mode, epoch):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as stream:
+        stream.write(body)
+    os.chmod(path, mode)
+    os.utime(path, (epoch, epoch), follow_symlinks=False)
+
+
+def write_deterministic_tar(source_root, archive_root, target, epoch):
+    with tarfile.open(target, "w", format=tarfile.GNU_FORMAT) as archive:
+        directories = {PurePosixPath(archive_root)}
+        files = []
+        for path in sorted(source_root.rglob("*"), key=lambda item: item.relative_to(source_root).as_posix()):
+            relative = PurePosixPath(archive_root) / PurePosixPath(path.relative_to(source_root).as_posix())
+            if path.is_dir():
+                directories.add(relative)
+            else:
+                files.append((path, relative))
+                directories.update(parent for parent in relative.parents if parent.as_posix() != ".")
+        for directory in sorted(directories, key=lambda item: (len(item.parts), item.as_posix())):
+            info = tarfile.TarInfo(directory.as_posix() + "/")
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o755
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            info.mtime = epoch
+            archive.addfile(info)
+        for path, relative in files:
+            info = tarfile.TarInfo(relative.as_posix())
+            info.size = path.stat().st_size
+            info.mode = path.stat().st_mode & 0o777
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            info.mtime = epoch
+            with path.open("rb") as stream:
+                archive.addfile(info, stream)
+
+
+def compress_zstd(source, target):
+    zstd = shutil.which("zstd")
+    if zstd is None:
+        fail("zstd is required to create .tar.zst output; use a .tar output for an uncompressed archive")
+    result = subprocess.run(
+        [zstd, "-q", "-19", "-T1", "-f", str(source), "-o", str(target)],
+        check=False,
+    )
+    if result.returncode != 0:
+        fail("zstd compression failed")
+
+
+def parse_arguments():
+    script_root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--arch", required=True, choices=("amd64", "arm64"))
+    parser.add_argument("--source-commit", default="unknown")
+    parser.add_argument("--source-date-epoch", type=int, default=int(os.environ.get("SOURCE_DATE_EPOCH", "0")))
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--compose", required=True)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--image", action="append", default=[], metavar="NAME=ARCHIVE")
+    parser.add_argument("--image-ref", action="append", default=[], metavar="NAME=REFERENCE")
+    parser.add_argument(
+        "--artifact", action="append", default=[], metavar="ROLE:DESTINATION=FILE",
+        help="add an optional sbom, vulnerability_report, notice, or signature artifact",
+    )
+    parser.add_argument("--docs-root", default=str(script_root / "docs"))
+    parser.add_argument("--schemas-root", default=str(script_root / "schemas"))
+    parser.add_argument("--license", default=str(script_root / "LICENSE"))
+    parser.add_argument("--ocsf-license", default=str(script_root / "schemas/vendor/ocsf/1.9.0/LICENSE"))
+    parser.add_argument("--verifier", default=str(script_root / "scripts/verify-offline-bundle.py"))
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
+    if not VERSION_PATTERN.fullmatch(args.version):
+        fail("version contains unsupported characters")
+    if not COMMIT_PATTERN.fullmatch(args.source_commit):
+        fail("source commit must be 40 lowercase hexadecimal characters or 'unknown'")
+    if args.source_date_epoch < 0:
+        fail("source date epoch cannot be negative")
+    output = Path(os.path.abspath(os.path.expanduser(args.output)))
+    if not (output.name.endswith(".tar") or output.name.endswith(".tar.zst")):
+        fail("output must end in .tar or .tar.zst")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    sidecar_path = Path(str(output) + ".sha256")
+    if output.exists() or output.is_symlink() or sidecar_path.exists() or sidecar_path.is_symlink():
+        fail(f"output already exists: {output}")
+
+    images = {}
+    for value in args.image:
+        name, source = parse_mapping(value, "--image")
+        if name in images:
+            fail(f"duplicate image name {name!r}")
+        images[name] = ("archive", source)
+    for value in args.image_ref:
+        name, reference = parse_mapping(value, "--image-ref")
+        if name in images:
+            fail(f"duplicate image name {name!r}")
+        images[name] = ("reference", reference)
+    missing_images = sorted(set(REQUIRED_IMAGES) - set(images))
+    extra_images = sorted(set(images) - set(REQUIRED_IMAGES))
+    if missing_images or extra_images:
+        fail(f"image inventory mismatch: missing={missing_images} unexpected={extra_images}")
+
+    archive_root = f"ulpf-offline-{args.version}-{args.arch}"
+    created_at = dt.datetime.fromtimestamp(args.source_date_epoch, tz=dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    with tempfile.TemporaryDirectory(prefix="ulpf-offline-build-") as temporary:
+        temporary_root = Path(temporary)
+        payload_root = temporary_root / "payload"
+        payload_root.mkdir()
+        assembly = Assembly(payload_root, args.source_date_epoch)
+        assembly.add_file(args.compose, "compose/compose.yaml", "compose")
+        assembly.add_file(args.config, "config/ulpf.yaml", "config")
+        assembly.add_tree(args.docs_root, "docs", "documentation")
+        assembly.add_tree(args.schemas_root, "schemas", "schema")
+        assembly.add_file(args.license, "licenses/LICENSE", "license")
+        assembly.add_file(args.ocsf_license, "licenses/OCSF-LICENSE", "license")
+        assembly.add_file(args.verifier, "install/verify-offline-bundle.py", "verifier", executable=True)
+        for value in args.artifact:
+            role, destination, source = parse_artifact(value)
+            assembly.add_file(source, destination, role)
+
+        engine = None
+        for name in REQUIRED_IMAGES:
+            source_kind, source_value = images[name]
+            source_path = source_value
+            if source_kind == "reference":
+                if engine is None:
+                    engine = find_engine()
+                if engine is None:
+                    fail("--image-ref requires an available Docker or Podman engine")
+                exported = temporary_root / f"{name}.tar"
+                export_image(engine, source_value, exported)
+                source_path = str(exported)
+            assembly.add_file(source_path, f"images/{name}-{args.arch}.tar", f"image.{name}")
+
+        manifest = {
+            "manifest_version": MANIFEST_VERSION,
+            "release": {
+                "version": args.version,
+                "architecture": args.arch,
+                "created_at": created_at,
+                "source_commit": args.source_commit,
+                "archive_root": archive_root,
+            },
+            "required_roles": [
+                "image.ulpf", "image.clickhouse", "image.prometheus", "compose", "config",
+                "documentation", "license", "schema", "verifier",
+            ],
+            "artifacts": [assembly.artifacts[path] for path in sorted(assembly.artifacts)],
+        }
+        manifest_body = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        write_bytes(payload_root / "manifest.json", manifest_body, 0o644, args.source_date_epoch)
+
+        checksum_paths = ["manifest.json"] + sorted(assembly.artifacts)
+        checksum_lines = []
+        for relative in sorted(checksum_paths):
+            digest, _ = digest_file(payload_root / relative)
+            checksum_lines.append(f"{digest}  {relative}\n")
+        write_bytes(payload_root / "SHA256SUMS", "".join(checksum_lines).encode("ascii"), 0o644, args.source_date_epoch)
+
+        tar_path = temporary_root / f"{archive_root}.tar"
+        write_deterministic_tar(payload_root, archive_root, tar_path, args.source_date_epoch)
+        if output.name.endswith(".tar.zst"):
+            compress_zstd(tar_path, output)
+        else:
+            shutil.copyfile(tar_path, output)
+        os.chmod(output, 0o644)
+        os.utime(output, (args.source_date_epoch, args.source_date_epoch), follow_symlinks=False)
+        archive_digest, _ = digest_file(output)
+        sidecar = Path(str(output) + ".sha256")
+        sidecar.write_text(f"{archive_digest}  {output.name}\n", encoding="ascii")
+        os.chmod(sidecar, 0o644)
+        os.utime(sidecar, (args.source_date_epoch, args.source_date_epoch), follow_symlinks=False)
+
+        verifier = Path(__file__).resolve().with_name("verify-offline-bundle.py")
+        verified = subprocess.run(
+            [sys.executable, str(verifier), str(output)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if verified.returncode != 0:
+            output.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+            detail = verified.stderr.strip() or "verification failed without diagnostics"
+            fail(f"assembled archive did not pass verification: {detail}")
+
+    print(f"offline bundle created: {output}")
+    print(f"sha256: {archive_digest}")
+
+
+if __name__ == "__main__":
+    main()
