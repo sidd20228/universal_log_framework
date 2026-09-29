@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          case '${{ matrix.arch }}:$(uname -m)' in
+          case "${{ matrix.arch }}:$(uname -m)" in
             amd64:x86_64|arm64:aarch64|arm64:arm64) ;;
             *) printf 'runner is not native for requested architecture\n' >&2; exit 1 ;;
           esac
