@@ -88,11 +88,22 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if test "$engine" = docker; then
-  "$engine" build --pull=false --tag "$image" --file "$dockerfile" .
-else
-  "$engine" build --pull=missing --tag "$image" --file "$dockerfile" .
-fi
+attempt=1
+while :; do
+  if test "$engine" = docker; then
+    if "$engine" build --pull=false --tag "$image" --file "$dockerfile" .; then
+      break
+    fi
+  elif "$engine" build --pull=missing --tag "$image" --file "$dockerfile" .; then
+    break
+  fi
+  if test "$attempt" -ge 3; then
+    fail "image build failed after $attempt attempts"
+  fi
+  printf 'container policy: image build attempt %s failed; retrying\n' "$attempt" >&2
+  sleep $((attempt * 5))
+  attempt=$((attempt + 1))
+done
 
 image_user=$("$engine" image inspect --format '{{.Config.User}}' "$image")
 test "$image_user" = '65532:65532' || fail "built image user is $image_user"

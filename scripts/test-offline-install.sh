@@ -24,10 +24,18 @@ install_dir=$temporary/release
 project=ulpf-offline-proof
 
 cleanup() {
+	status=$?
+	trap - EXIT INT TERM
   if test -f "$install_dir/compose/compose.yaml"; then
+	if test "$status" -ne 0; then
+	  printf '%s\n' 'offline clean-install failed; preserving service diagnostics:' >&2
+	  docker compose -p "$project" -f "$install_dir/compose/compose.yaml" ps --all >&2 || true
+	  docker compose -p "$project" -f "$install_dir/compose/compose.yaml" logs --no-color >&2 || true
+	fi
     docker compose -p "$project" -f "$install_dir/compose/compose.yaml" down --volumes --remove-orphans >/dev/null 2>&1 || true
   fi
   rm -rf "$temporary"
+	exit "$status"
 }
 trap cleanup EXIT INT TERM
 
