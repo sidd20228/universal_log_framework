@@ -25,11 +25,28 @@ export CLICKHOUSE_PASSWORD=$password
 export ULPF_HTTP_PORT=${ULPF_HTTP_PORT:-18080}
 
 cleanup() {
+  status=$?
+  trap - EXIT INT TERM
+  if test "$status" -ne 0; then
+    printf '%s\n' 'compose smoke failed; preserving service diagnostics:' >&2
+    $compose ps --all >&2 || true
+    $compose logs --no-color >&2 || true
+  fi
   $compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+  exit "$status"
 }
 trap cleanup EXIT INT TERM
 
-$compose up --build --detach --wait
+attempt=1
+while ! $compose up --build --detach --wait; do
+  if test "$attempt" -ge 3; then
+    printf 'compose smoke: services did not become healthy after %s attempts\n' "$attempt" >&2
+    exit 1
+  fi
+  printf 'compose smoke: startup attempt %s failed; retrying\n' "$attempt" >&2
+  sleep $((attempt * 5))
+  attempt=$((attempt + 1))
+done
 
 response=$(curl --silent --show-error --fail-with-body \
   -H "Authorization: Bearer $ULPF_API_TOKEN" \
