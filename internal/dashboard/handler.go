@@ -2,6 +2,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -24,6 +25,20 @@ func Handler() http.Handler {
 	assets, err := fs.Sub(embedded, "assets")
 	if err != nil {
 		panic(err)
+	}
+	assetBodies := make(map[string][]byte, 3)
+	for _, name := range []string{"index.html", "styles.css", "app.js"} {
+		body, readErr := fs.ReadFile(assets, name)
+		if readErr != nil {
+			panic(readErr)
+		}
+		assetBodies[name] = body
+	}
+	for _, name := range []string{"styles.css", "app.js"} {
+		digest := sha256.Sum256(assetBodies[name])
+		plainURL := []byte("/dashboard/" + name)
+		versionedURL := []byte("/dashboard/" + name + "?v=" + hex.EncodeToString(digest[:6]))
+		assetBodies["index.html"] = bytes.ReplaceAll(assetBodies["index.html"], plainURL, versionedURL)
 	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setSecurityHeaders(writer.Header())
@@ -48,8 +63,8 @@ func Handler() http.Handler {
 			http.NotFound(writer, request)
 			return
 		}
-		body, readErr := fs.ReadFile(assets, name)
-		if readErr != nil {
+		body, found := assetBodies[name]
+		if !found {
 			http.NotFound(writer, request)
 			return
 		}
@@ -68,7 +83,7 @@ func Handler() http.Handler {
 		if name == "index.html" {
 			writer.Header().Set("Cache-Control", "no-store")
 		} else {
-			writer.Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
+			writer.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 		}
 		writer.Header().Set("Content-Length", stringLength(len(body)))
 		writer.WriteHeader(http.StatusOK)

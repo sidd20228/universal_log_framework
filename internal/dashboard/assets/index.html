@@ -103,11 +103,11 @@
             <span class="live-label"><span class="status-dot idle" id="pipelineDot" aria-hidden="true"></span><span id="pipelineState">Waiting</span></span>
           </div>
           <ol class="pipeline" id="pipelineStages">
-            <li data-stage="frame"><span class="stage-num">01</span><div><strong>Frame</strong><b>—</b><small>Transport boundaries</small></div></li>
-            <li data-stage="admit"><span class="stage-num">02</span><div><strong>Admit</strong><b>—</b><small>Durable receipt</small></div></li>
-            <li data-stage="interpret"><span class="stage-num">03</span><div><strong>Interpret</strong><b>—</b><small>Detect and parse</small></div></li>
-            <li data-stage="commit"><span class="stage-num">04</span><div><strong>Commit</strong><b>—</b><small>Immutable revision</small></div></li>
-            <li data-stage="deliver"><span class="stage-num">05</span><div><strong>Deliver</strong><b>—</b><small>SIEM / data lake</small></div></li>
+            <li><button class="pipeline-stage" data-stage="frame" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">01</span><span class="stage-copy"><strong>Frame</strong><b>—</b><small>Transport boundaries</small></span></button></li>
+            <li><button class="pipeline-stage" data-stage="admit" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">02</span><span class="stage-copy"><strong>Admit</strong><b>—</b><small>Durable receipt</small></span></button></li>
+            <li><button class="pipeline-stage" data-stage="interpret" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">03</span><span class="stage-copy"><strong>Interpret</strong><b>—</b><small>Detect and parse</small></span></button></li>
+            <li><button class="pipeline-stage" data-stage="commit" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">04</span><span class="stage-copy"><strong>Commit</strong><b>—</b><small>Immutable revision</small></span></button></li>
+            <li><button class="pipeline-stage" data-stage="deliver" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">05</span><span class="stage-copy"><strong>Deliver</strong><b>—</b><small>SIEM / data lake</small></span></button></li>
           </ol>
         </section>
 
@@ -153,6 +153,15 @@
       </main>
     </div>
 
+    <aside class="trace-drawer" id="pipelineDrawer" aria-labelledby="pipelineDetailTitle" aria-hidden="true">
+      <div class="drawer-head">
+        <div><p class="eyebrow">PIPELINE STAGE</p><h2 id="pipelineDetailTitle">Stage details</h2><p>Live count, status and processing contract.</p></div>
+        <button class="icon-button" id="closePipelineButton" type="button" aria-label="Close pipeline stage details">×</button>
+      </div>
+      <div class="trace-content" id="pipelineDetail">
+        <div class="trace-empty"><span aria-hidden="true">⌁</span><strong>Select a stage</strong><p>Choose a pipeline stage to inspect its current state.</p></div>
+      </div>
+    </aside>
     <aside class="trace-drawer" id="traceDrawer" aria-labelledby="traceTitle" aria-hidden="true">
       <div class="drawer-head">
         <div><p class="eyebrow">END-TO-END PROVENANCE</p><h2 id="traceTitle">Trace inspector</h2><p>Receipt, evidence and processing metadata.</p></div>
@@ -162,7 +171,7 @@
         <div class="trace-empty"><span aria-hidden="true">⌁</span><strong>Select an event</strong><p>Choose a recent event to inspect its durable trace.</p></div>
       </div>
     </aside>
-    <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="Close trace inspector" tabindex="-1"></button>
+    <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="Close open detail pane" tabindex="-1"></button>
   </div>
   <div class="sr-only" id="announcer" aria-live="polite"></div>
 </body>

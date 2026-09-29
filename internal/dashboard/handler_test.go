@@ -1,6 +1,8 @@
 package dashboard
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"io/fs"
 	"net/http"
@@ -91,6 +93,31 @@ func TestHandlerSupportsHeadAndConditionalRequests(t *testing.T) {
 	}
 }
 
+func TestHandlerRequiresAssetRevalidation(t *testing.T) {
+	response := httptest.NewRecorder()
+	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/app.js", nil))
+	cacheControl := response.Header().Get("Cache-Control")
+	if !strings.Contains(cacheControl, "max-age=0") || !strings.Contains(cacheControl, "must-revalidate") {
+		t.Fatalf("asset cache control must revalidate deployed assets immediately, got %q", cacheControl)
+	}
+}
+
+func TestHandlerVersionsAssetURLsByContent(t *testing.T) {
+	response := httptest.NewRecorder()
+	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/", nil))
+	for _, name := range []string{"styles.css", "app.js"} {
+		asset, err := fs.ReadFile(embedded, "assets/"+name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(asset)
+		versionedURL := "/dashboard/" + name + "?v=" + hex.EncodeToString(digest[:6])
+		if !strings.Contains(response.Body.String(), versionedURL) {
+			t.Fatalf("dashboard HTML is missing content-versioned asset URL %q", versionedURL)
+		}
+	}
+}
+
 func TestDashboardDoesNotRequestRawPayloads(t *testing.T) {
 	body, err := fs.ReadFile(embedded, "assets/app.js")
 	if err != nil {
@@ -122,6 +149,36 @@ func TestDashboardIncludesFederatedScopeAndSameOriginTracePaths(t *testing.T) {
 	for _, behavior := range []string{"aggregateOrigins", "Unavailable · last known retained", "event.event_url", "event.receipt_url", "federatedTracePath"} {
 		if !strings.Contains(script, behavior) {
 			t.Fatalf("dashboard is missing federated behavior %q", behavior)
+		}
+	}
+}
+
+func TestDashboardPipelineStagesOpenDetailPane(t *testing.T) {
+	page, err := fs.ReadFile(embedded, "assets/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	markup := string(page)
+	for _, stage := range []string{"frame", "admit", "interpret", "commit", "deliver"} {
+		control := `class="pipeline-stage" data-stage="` + stage + `"`
+		if !strings.Contains(markup, control) {
+			t.Fatalf("dashboard pipeline is missing interactive %s control", stage)
+		}
+	}
+	for _, identifier := range []string{`id="pipelineDrawer"`, `id="pipelineDetail"`, `id="closePipelineButton"`} {
+		if !strings.Contains(markup, identifier) {
+			t.Fatalf("dashboard is missing pipeline detail pane control %s", identifier)
+		}
+	}
+
+	application, err := fs.ReadFile(embedded, "assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(application)
+	for _, behavior := range []string{"openPipelineStage", "closePipelineStage", `pipelineStages.addEventListener("click"`} {
+		if !strings.Contains(script, behavior) {
+			t.Fatalf("dashboard is missing pipeline interaction %q", behavior)
 		}
 	}
 }

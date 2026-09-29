@@ -4,6 +4,43 @@
   const STORAGE_TENANT = "ulpf.dashboard.tenant";
   const STORAGE_TOKEN = "ulpf.dashboard.token";
   const REFRESH_INTERVAL_MS = 10_000;
+  const PIPELINE_STAGE_DETAILS = Object.freeze({
+    frame: {
+      title: "Frame",
+      summary: "Separates each incoming transport stream into complete event records.",
+      input: "Bytes received through HTTP, syslog, files or another configured transport.",
+      output: "A complete event frame with transport and listener context.",
+      guarantee: "Transport boundaries are resolved before evidence is admitted.",
+    },
+    admit: {
+      title: "Admit",
+      summary: "Persists the original event and creates its durable receipt.",
+      input: "A complete framed event plus tenant and source context.",
+      output: "An immutable receipt linked to content-addressed raw evidence.",
+      guarantee: "Original bytes remain available without lossy transformation.",
+    },
+    interpret: {
+      title: "Interpret",
+      summary: "Detects the source format, parses attributes and maps common fields.",
+      input: "Raw evidence referenced by a durable receipt.",
+      output: "Source attributes, canonical fields, provenance and quality metadata.",
+      guarantee: "Every normalized value remains traceable to its source evidence.",
+    },
+    commit: {
+      title: "Commit",
+      summary: "Stores an immutable processing revision for the interpretation result.",
+      input: "Parsed fields, canonical mappings, issues and parser identity.",
+      output: "A versioned event envelope linked to its receipt and raw evidence.",
+      guarantee: "Reprocessing adds revisions and never overwrites earlier meaning.",
+    },
+    deliver: {
+      title: "Deliver",
+      summary: "Routes committed envelopes to configured SIEM and data lake targets.",
+      input: "A committed canonical event envelope.",
+      output: "Tracked delivery attempts with pending, delivered or failed state.",
+      guarantee: "Connector outcomes are observable and retryable without reparsing.",
+    },
+  });
   const state = {
     tenant: "",
     token: "",
@@ -16,6 +53,7 @@
     health: null,
     fallbackEvents: [],
     selectedRevision: "",
+    selectedStage: "",
     refreshController: null,
     timer: null,
     previousFocus: null,
@@ -34,6 +72,8 @@
     statusList: element("statusList"), eventsBody: element("eventsBody"), eventCount: element("eventCount"), eventScope: element("eventScope"),
     environmentFilter: element("environmentFilter"), instanceFilter: element("instanceFilter"),
     scopeSummary: element("scopeSummary"), nodeGroups: element("nodeGroups"),
+    pipelineDrawer: element("pipelineDrawer"), pipelineDetail: element("pipelineDetail"),
+    closePipeline: element("closePipelineButton"),
     drawer: element("traceDrawer"), traceContent: element("traceContent"),
     closeTrace: element("closeTraceButton"), scrim: element("drawerScrim"), announcer: element("announcer"),
   };
@@ -309,7 +349,7 @@
       const key = String(item?.stage || item?.name || "").toLowerCase();
       if (key) byStage.set(key, item);
     });
-    ui.pipelineStages.querySelectorAll("li").forEach((node) => {
+    ui.pipelineStages.querySelectorAll(".pipeline-stage").forEach((node) => {
       const item = byStage.get(node.dataset.stage);
       node.classList.remove("ok", "warn", "error");
       node.querySelector("b").textContent = formatCount(item?.count);
@@ -318,6 +358,87 @@
       node.classList.add(status === "failed" || status === "error" ? "error" : status === "warning" || status === "pending" || status === "attention" ? "warn" : "ok");
       if (item.detail || item.description) node.querySelector("small").textContent = String(item.detail || item.description);
     });
+    if (state.selectedStage && ui.pipelineDrawer.classList.contains("open")) renderPipelineDetail(state.selectedStage);
+  }
+
+  function pipelineStatus(status) {
+    const value = String(status || "idle").toLowerCase();
+    if (value === "failed" || value === "error") return { label: value, className: "error" };
+    if (value === "warning" || value === "pending" || value === "attention") return { label: value, className: "warn" };
+    return { label: value, className: value === "idle" ? "" : "ok" };
+  }
+
+  function pipelineSignals(stage, summary, item) {
+    const totals = totalsOf(summary);
+    const groups = statusGroups(summary);
+    const origins = originsOf(summary);
+    const common = [["Current stage count", formatCount(item?.count)], ["Runtime origins", formatCount(origins.length || nodesOf(summary).length)]];
+    if (stage === "frame") return [...common, ["Accepted receipts", formatCount(totals.receipts)], ["Observed raw data", formatBytes(totals.raw_bytes)]];
+    if (stage === "admit") return [...common, ["Durable receipts", formatCount(totals.receipts)], ["Raw bytes preserved", formatBytes(totals.raw_bytes)]];
+    if (stage === "interpret") return [...common, ["Parsed", formatCount(groups.parsed)], ["Partial / failed", formatCount(groups.partial + groups.failed)]];
+    if (stage === "commit") return [...common, ["Immutable revisions", formatCount(totals.revisions)], ["Receipts", formatCount(totals.receipts)]];
+    return [...common, ["Delivered", formatCount(totals.delivered)], ["Pending", formatCount(totals.pending)], ["Failed", formatCount(totals.failed)]];
+  }
+
+  function stageContractCard(label, value) {
+    const card = document.createElement("div"); card.className = "stage-contract-card";
+    const heading = document.createElement("span"); heading.textContent = label;
+    const copy = document.createElement("p"); copy.textContent = value;
+    card.append(heading, copy);
+    return card;
+  }
+
+  function renderPipelineDetail(stage) {
+    const definition = PIPELINE_STAGE_DETAILS[stage];
+    if (!definition) return;
+    const summary = scopedSummary();
+    const item = (Array.isArray(summary?.pipeline) ? summary.pipeline : []).find((candidate) => String(candidate?.stage || candidate?.name || "").toLowerCase() === stage);
+    const status = pipelineStatus(item?.status);
+    const content = document.createDocumentFragment();
+    const overview = document.createElement("section"); overview.className = "stage-overview";
+    const description = document.createElement("div");
+    const title = document.createElement("h3"); title.textContent = `${String(Object.keys(PIPELINE_STAGE_DETAILS).indexOf(stage) + 1).padStart(2, "0")} · ${definition.title}`;
+    const summaryText = document.createElement("p"); summaryText.textContent = definition.summary;
+    const statusBadge = document.createElement("span"); statusBadge.className = `stage-status${status.className ? ` ${status.className}` : ""}`; statusBadge.textContent = status.label;
+    description.append(title, summaryText, statusBadge);
+    const count = document.createElement("div"); count.className = "stage-count";
+    const countValue = document.createElement("strong"); countValue.textContent = formatCount(item?.count);
+    const countLabel = document.createElement("small"); countLabel.textContent = "events observed";
+    count.append(countValue, countLabel); overview.append(description, count); content.append(overview);
+
+    const signals = document.createElement("section"); signals.className = "trace-card";
+    pipelineSignals(stage, summary, item).forEach(([label, value]) => {
+      const row = document.createElement("div"); row.className = "kv";
+      const key = document.createElement("span"); key.textContent = label;
+      const signalValue = document.createElement("strong"); signalValue.textContent = value;
+      row.append(key, signalValue); signals.append(row);
+    });
+    content.append(signals);
+
+    const contract = document.createElement("section"); contract.className = "stage-contract";
+    const contractTitle = document.createElement("h3"); contractTitle.textContent = "Processing contract";
+    contract.append(contractTitle, stageContractCard("Input", definition.input), stageContractCard("Output", definition.output), stageContractCard("Guarantee", definition.guarantee));
+    content.append(contract);
+    ui.pipelineDetail.replaceChildren(content);
+  }
+
+  function openPipelineStage(stage, trigger) {
+    if (!PIPELINE_STAGE_DETAILS[stage]) return;
+    closeTrace(false);
+    state.selectedStage = stage; state.previousFocus = trigger;
+    ui.pipelineStages.querySelectorAll(".pipeline-stage").forEach((button) => button.setAttribute("aria-expanded", String(button === trigger)));
+    renderPipelineDetail(stage);
+    ui.pipelineDrawer.classList.add("open"); ui.scrim.classList.add("open"); ui.pipelineDrawer.setAttribute("aria-hidden", "false");
+    ui.closePipeline.focus();
+    announce(`${PIPELINE_STAGE_DETAILS[stage].title} pipeline stage details opened`);
+  }
+
+  function closePipelineStage(restoreFocus = true) {
+    ui.pipelineDrawer.classList.remove("open"); ui.pipelineDrawer.setAttribute("aria-hidden", "true");
+    ui.pipelineStages.querySelectorAll(".pipeline-stage").forEach((button) => button.setAttribute("aria-expanded", "false"));
+    if (!ui.drawer.classList.contains("open")) ui.scrim.classList.remove("open");
+    const previous = state.previousFocus; state.previousFocus = null; state.selectedStage = "";
+    if (restoreFocus && previous && document.contains(previous)) previous.focus();
   }
 
   function statusGroups(summary) {
@@ -534,6 +655,7 @@
 
   async function inspectEvent(event, trigger) {
     if (!event.revision_id || !event.receipt_id || !state.token) return;
+    closePipelineStage(false);
     state.selectedRevision = event.revision_id;
     state.previousFocus = trigger;
     renderEvents();
@@ -555,10 +677,10 @@
     }
   }
 
-  function closeTrace() {
+  function closeTrace(restoreFocus = true) {
     ui.drawer.classList.remove("open"); ui.scrim.classList.remove("open"); ui.drawer.setAttribute("aria-hidden", "true");
     const previous = state.previousFocus; state.previousFocus = null;
-    if (previous && document.contains(previous)) previous.focus();
+    if (restoreFocus && previous && document.contains(previous)) previous.focus();
   }
 
   function describeError(error) {
@@ -664,7 +786,7 @@
     ui.tenant.value = ""; ui.token.value = ""; ui.sidebarTenant.textContent = "No tenant";
     setConnection("idle", "Not connected", "Enter tenant and token");
     showNotice("Connection details cleared. Enter a tenant and token to reconnect.");
-    closeTrace(); resetData(); scheduleRefresh(); ui.tenant.focus();
+    closePipelineStage(false); closeTrace(false); resetData(); scheduleRefresh(); ui.tenant.focus();
   }
 
   ui.form.addEventListener("submit", connect);
@@ -673,12 +795,24 @@
   ui.autoRefresh.addEventListener("change", scheduleRefresh);
   ui.environmentFilter.addEventListener("change", () => { populateScopeFilters(state.summary); applyScope(); });
   ui.instanceFilter.addEventListener("change", applyScope);
+  ui.pipelineStages.addEventListener("click", (event) => {
+    const trigger = event.target.closest(".pipeline-stage");
+    if (trigger) openPipelineStage(trigger.dataset.stage, trigger);
+  });
+  ui.closePipeline.addEventListener("click", () => closePipelineStage());
   ui.closeTrace.addEventListener("click", closeTrace);
-  ui.scrim.addEventListener("click", closeTrace);
+  ui.scrim.addEventListener("click", () => {
+    if (ui.pipelineDrawer.classList.contains("open")) closePipelineStage();
+    else closeTrace();
+  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && ui.drawer.classList.contains("open")) closeTrace();
-    if (event.key === "Tab" && ui.drawer.classList.contains("open")) {
-      const focusable = [...ui.drawer.querySelectorAll("button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])")];
+    const activeDrawer = ui.pipelineDrawer.classList.contains("open") ? ui.pipelineDrawer : ui.drawer.classList.contains("open") ? ui.drawer : null;
+    if (event.key === "Escape" && activeDrawer) {
+      if (activeDrawer === ui.pipelineDrawer) closePipelineStage();
+      else closeTrace();
+    }
+    if (event.key === "Tab" && activeDrawer) {
+      const focusable = [...activeDrawer.querySelectorAll("button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])")];
       if (!focusable.length) return;
       const first = focusable[0], last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }

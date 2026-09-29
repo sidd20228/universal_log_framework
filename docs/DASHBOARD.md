@@ -25,7 +25,8 @@ update.
 ## What it shows
 
 - durable receipt, committed revision, and preserved raw-byte totals;
-- readiness and the Frame → Admit → Interpret → Commit → Deliver flow;
+- readiness and the Frame → Admit → Interpret → Commit → Deliver flow, with a
+  selectable detail pane for each stage's live signals and processing contract;
 - accepted and committed activity in twelve five-minute buckets;
 - interpretation status distribution;
 - the twenty newest committed events for the selected tenant;
@@ -80,7 +81,10 @@ its replication, retention, capacity, and availability.
 
 ## Security and disconnected operation
 
-The static files are compiled into the Go binary. Responses include a strict
+The static files are compiled into the Go binary. Their URLs include a content
+digest and their cache policy requires revalidation, so a rebuilt deployment
+cannot leave the browser running an older script against newer markup.
+Responses include a strict
 Content Security Policy, frame denial, content-type protection, and a
 same-origin referrer policy. The page has no third-party scripts, fonts,
 analytics, images, or network calls. This makes the dashboard available in the
