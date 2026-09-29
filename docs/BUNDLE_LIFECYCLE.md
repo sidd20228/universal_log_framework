@@ -48,6 +48,20 @@ Reinstalling the same digest is idempotent. Different bytes with an installed
 ID and version are rejected; operators must publish a new semantic version.
 The source directory is no longer needed after installation.
 
+## Per-parser normalization
+
+A parser declaration may set `mappings` to the relative path of a declared
+artifact with role `mappings`. The compiler verifies its checksum and loads it
+as that parser's mapping configuration, including its inline taxonomies. This
+overrides the bundle-level mapping for that parser. Parsers without this field
+continue to inherit the bundle-level mapping. Bundle-level external taxonomy
+artifacts apply to the bundle-level mapping only.
+
+This allows one trusted source profile to accept several formats with distinct
+field paths. The [enterprise demo bundle](DEMO_NORMALIZATION.md) uses this for
+JSON, CEF, LEEF, key/value, Syslog, XML, and CSV. Invalid artifact references or
+mapping configurations prevent activation.
+
 ## Activate and roll back
 
 Activation binds one source profile to one installed digest. The expected
@@ -110,6 +124,11 @@ first-pass output. It does not update the receipt state, raw
 reference, raw hash, or earlier revisions. The same accepted occurrence can
 therefore be compared across bundle and pipeline versions without creating a
 new receipt or rewriting evidence.
+
+The delivery reconciler exports the new revision independently. If an earlier
+revision was already delivered, enqueueing the new required delivery moves the
+receipt back to `DELIVERY_PENDING` until all required deliveries complete. The
+old revision's delivery record stays delivered; repeated enqueueing is idempotent.
 
 The automated onboarding scenario in
 `internal/registry/lifecycle_test.go` installs and activates a synthetic v1

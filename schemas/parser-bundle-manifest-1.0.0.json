@@ -180,6 +180,10 @@
           "type": "integer",
           "minimum": -1000,
           "maximum": 1000
+        },
+        "mappings": {
+          "$ref": "#/$defs/path",
+          "description": "Optional parser-specific mapping artifact with inline taxonomies; overrides bundle-level mapping."
         }
       }
     },

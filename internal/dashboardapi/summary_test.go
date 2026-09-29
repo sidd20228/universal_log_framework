@@ -171,12 +171,16 @@ raw_ref, raw_sha256, raw_size, raw_compression, raw_available, state
 	}
 }
 
-func insertRevision(t *testing.T, database *sql.DB, id, receiptID, status, parserID string, created time.Time) {
+func insertRevision(t *testing.T, database *sql.DB, id, receiptID, status, parserID string, created time.Time, versions ...string) {
 	t.Helper()
+	pipelineVersion := "1.0.0"
+	if len(versions) != 0 {
+		pipelineVersion = versions[0]
+	}
 	revision := map[string]any{
 		"revision_id":      id,
 		"receipt_id":       receiptID,
-		"pipeline_version": "1.0.0",
+		"pipeline_version": pipelineVersion,
 		"schema_version":   "ulpf-envelope/1.0.0",
 		"status":           status,
 		"parser":           map[string]string{"id": parserID, "version": "1.0.0"},
@@ -199,8 +203,45 @@ func insertRevision(t *testing.T, database *sql.DB, id, receiptID, status, parse
 	}
 	_, err = database.Exec(`INSERT INTO revisions (
 revision_id, receipt_id, pipeline_version, bundle_sha256, revision_json, envelope_json, created_at_ns
-) VALUES (?, ?, '1.0.0', '', ?, ?, ?)`, id, receiptID, string(body), string(envelopeBody), created.UnixNano())
+) VALUES (?, ?, ?, '', ?, ?, ?)`, id, receiptID, pipelineVersion, string(body), string(envelopeBody), created.UnixNano())
 	if err != nil {
 		t.Fatalf("insert revision %s: %v", id, err)
+	}
+}
+
+func TestSummaryUsesLatestRevisionWithoutDiscardingHistory(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "runtime.db")
+	store, err := inbox.OpenSQLite(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	insertReceipt(t, db, "receipt-demo", "tenant-a", now.Add(-time.Minute), "REVISION_COMMITTED", 100)
+	insertRevision(t, db, "revision-old", "receipt-demo", "PARTIALLY_PARSED", "json", now.Add(-time.Second), "1.0.0")
+	insertRevision(t, db, "revision-new", "receipt-demo", "PARSED", "demo-json", now, "2.0.0")
+	reader, err := NewSQLiteReader(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	summary, err := reader.ReadSummary(ctx, "tenant-a", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.StatusCounts["PARSED"] != 1 || summary.StatusCounts["PARTIALLY_PARSED"] != 0 {
+		t.Fatalf("current statuses = %v", summary.StatusCounts)
+	}
+	if summary.Totals.Revisions != 2 || summary.Totals.Receipts != 1 {
+		t.Fatalf("history totals = %+v", summary.Totals)
+	}
+	if len(summary.RecentEvents) != 1 || summary.RecentEvents[0].RevisionID != "revision-new" {
+		t.Fatalf("recent = %+v", summary.RecentEvents)
 	}
 }

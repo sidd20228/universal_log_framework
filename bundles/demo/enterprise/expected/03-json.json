@@ -1,0 +1,13 @@
+{
+  "class_uid": 3002,
+  "class_name": "Authentication",
+  "action": "deny",
+  "src_endpoint": {
+    "ip": "10.24.3.23"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.13"
+  },
+  "time": "2026-09-29T10:20:29Z",
+  "severity": "low"
+}

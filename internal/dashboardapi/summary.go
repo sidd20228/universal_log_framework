@@ -193,7 +193,9 @@ func (reader *SQLiteReader) ReadSummary(ctx context.Context, tenantID string, no
 	}
 	statusCounts, err := groupedCounts(ctx, tx, `SELECT json_extract(rv.revision_json, '$.status'), COUNT(*)
 FROM revisions rv JOIN receipts r ON r.receipt_id = rv.receipt_id
-WHERE r.tenant_id = ? GROUP BY json_extract(rv.revision_json, '$.status')`, tenantID)
+WHERE r.tenant_id = ? AND NOT EXISTS (SELECT 1 FROM revisions newer WHERE newer.receipt_id = rv.receipt_id
+AND (newer.created_at_ns > rv.created_at_ns OR
+(newer.created_at_ns = rv.created_at_ns AND newer.revision_id > rv.revision_id))) GROUP BY json_extract(rv.revision_json, '$.status')`, tenantID)
 	if err != nil {
 		return Summary{}, fmt.Errorf("count processing statuses: %w", err)
 	}
@@ -384,7 +386,9 @@ SUBSTR(COALESCE(
 ), 1, 80),
 json_extract(rv.envelope_json, '$.quality.score')
 FROM revisions rv JOIN receipts r ON r.receipt_id = rv.receipt_id
-WHERE r.tenant_id = ? ORDER BY rv.created_at_ns DESC, rv.revision_id DESC LIMIT ?`, tenantID, recentLimit)
+WHERE r.tenant_id = ? AND NOT EXISTS (SELECT 1 FROM revisions newer WHERE newer.receipt_id = rv.receipt_id
+AND (newer.created_at_ns > rv.created_at_ns OR
+(newer.created_at_ns = rv.created_at_ns AND newer.revision_id > rv.revision_id))) ORDER BY rv.created_at_ns DESC, rv.revision_id DESC LIMIT ?`, tenantID, recentLimit)
 	if err != nil {
 		return nil, fmt.Errorf("read recent events: %w", err)
 	}

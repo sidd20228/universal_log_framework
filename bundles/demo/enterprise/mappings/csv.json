@@ -1,0 +1,121 @@
+{
+  "config_version": "ulpf-mapping/1",
+  "id": "enterprise-demo-csv",
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "class-uid",
+      "from": "fields.records.0.source_name",
+      "to": "event.class_uid",
+      "convert": "lowercase",
+      "lookup": "source-class-uid",
+      "required": true
+    },
+    {
+      "id": "class-name",
+      "from": "fields.records.0.source_name",
+      "to": "event.class_name",
+      "convert": "lowercase",
+      "lookup": "source-class-name",
+      "required": true
+    },
+    {
+      "id": "action",
+      "from": "fields.records.0.action",
+      "to": "event.action",
+      "convert": "lowercase",
+      "lookup": "action",
+      "required": true
+    },
+    {
+      "id": "source-ip",
+      "from": "fields.records.0.src_ip",
+      "to": "event.src_endpoint.ip",
+      "convert": "ip",
+      "required": true
+    },
+    {
+      "id": "destination-ip",
+      "from": "fields.records.0.dst_ip",
+      "to": "event.dst_endpoint.ip",
+      "convert": "ip",
+      "required": true
+    },
+    {
+      "id": "event-time",
+      "from": "fields.records.0.timestamp",
+      "to": "event.time",
+      "convert": "timestamp",
+      "timestamp_layouts": [
+        "RFC3339Nano"
+      ],
+      "required": true
+    }
+  ],
+  "taxonomies": {
+    "source-class-uid": {
+      "4001": [
+        "palo alto firewall",
+        "asa",
+        "qradar ips"
+      ],
+      "3002": [
+        "windows security",
+        "okta system log",
+        "microsoft entra id"
+      ],
+      "6003": [
+        "aws cloudtrail",
+        "kubernetes audit",
+        "paymentapp",
+        "saas audit export"
+      ],
+      "1007": [
+        "crowdstrike falcon"
+      ],
+      "4002": [
+        "nginx access"
+      ],
+      "1008": [
+        "linux syslog"
+      ],
+      "6005": [
+        "oracle audit"
+      ]
+    },
+    "source-class-name": {
+      "Network Activity": [
+        "palo alto firewall",
+        "asa",
+        "qradar ips"
+      ],
+      "Authentication": [
+        "windows security",
+        "okta system log",
+        "microsoft entra id"
+      ],
+      "API Activity": [
+        "aws cloudtrail",
+        "kubernetes audit",
+        "paymentapp",
+        "saas audit export"
+      ],
+      "Process Activity": [
+        "crowdstrike falcon"
+      ],
+      "HTTP Activity": [
+        "nginx access"
+      ],
+      "Event Log Activity": [
+        "linux syslog"
+      ],
+      "Datastore Activity": [
+        "oracle audit"
+      ]
+    },
+    "action": {
+      "allow": [],
+      "deny": []
+    }
+  }
+}

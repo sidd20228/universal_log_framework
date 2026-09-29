@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"Palo Alto Firewall","source_family":"Network","action":"deny","src_ip":"10.24.0.20","dst_ip":"198.51.100.10","user":"demo-user-0","severity":"low","synthetic":true}

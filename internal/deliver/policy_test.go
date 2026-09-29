@@ -72,6 +72,30 @@ func TestRequiredAndOptionalConnectorPolicyDrivesReceiptState(t *testing.T) {
 	if err != nil || len(summaries) != 2 {
 		t.Fatalf("summaries=%#v err=%v", summaries, err)
 	}
+
+	// A later normalization revision needs its own delivery even when the
+	// original revision of this receipt has already reached the sink.
+	reprocessed := testExportRecord("receipt-policy", "revision-reprocessed")
+	targets := []EnqueueTarget{{ConnectorID: "required", Required: true}}
+	if err := store.EnqueueAll(ctx, targets, []ExportRecord{reprocessed}, now); err != nil {
+		t.Fatalf("enqueue reprocessed revision: %v", err)
+	}
+	assertReceiptState(t, database, "receipt-policy", "DELIVERY_PENDING")
+	if err := store.EnqueueAll(ctx, targets, []ExportRecord{reprocessed}, now); err != nil {
+		t.Fatalf("idempotent enqueue: %v", err)
+	}
+	claimed, err := store.Claim(ctx, "required", "worker", now, time.Minute, 10)
+	if err != nil || len(claimed) != 1 || claimed[0].Record.RevisionID != reprocessed.RevisionID {
+		t.Fatalf("reprocessed delivery claim=%#v err=%v", claimed, err)
+	}
+	if err := store.Complete(ctx, "required", "worker", now, []Completion{{RevisionID: reprocessed.RevisionID, State: StateDelivered}}); err != nil {
+		t.Fatal(err)
+	}
+	assertReceiptState(t, database, "receipt-policy", "DELIVERED")
+	original, err := store.Get(ctx, "required", record.RevisionID)
+	if err != nil || original.State != StateDelivered || original.Attempts != 1 {
+		t.Fatalf("original delivery changed: %#v %v", original, err)
+	}
 }
 
 func TestTenantScopedDLQInspectionAndReplay(t *testing.T) {

@@ -1,0 +1,9 @@
+{
+  "class_uid": 1008,
+  "class_name": "Event Log Activity",
+  "action": "allow",
+  "src_endpoint": {
+    "ip": "10.24.2.30"
+  },
+  "time": "2026-09-29T10:20:29Z"
+}

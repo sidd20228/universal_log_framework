@@ -759,12 +759,13 @@
     content.append(traceSection("Processing revision", [
       ["Revision ID", processing.revision_id || event.revision_id], ["Status", processing.status || event.status],
       ["Parser", parser.id ? `${parser.id}${parser.version ? ` ${parser.version}` : ""}` : "—"],
-      ["Pipeline", processing.pipeline_version], ["Completed", formatTime(processing.timestamps?.completed_at)],
+      ["Pipeline", processing.pipeline_version], ["Mapping", processing.mapping_version || "Not configured"], ["Completed", formatTime(processing.timestamps?.completed_at)],
       ["Issues", Array.isArray(processing.issues) ? processing.issues.length : "—"],
+      ...((processing.issues || []).map((issue) => [issue.code, issue.source_path || issue.stage])),
     ], processing.revision_id || event.revision_id));
     content.append(traceSection("Canonical envelope", [
-      ["Schema", envelope?.schema_version], ["Class UID", canonical.class_uid], ["Action", canonical.action],
-      ["Source IP", canonical.src_ip], ["Destination IP", canonical.dst_ip], ["Provenance fields", provenanceCount],
+      ["Schema", envelope?.schema_version], ["Class UID", canonical.class_uid], ["Class", canonical.class_name], ["Action", canonical.action],
+      ["Source IP", canonical.src_endpoint?.ip], ["Destination IP", canonical.dst_endpoint?.ip], ["Provenance fields", provenanceCount],
       ["Quality score", numberOrNull(envelope?.quality?.score) === null ? "—" : `${Math.round(envelope.quality.score * 100)}%`],
     ]));
     ui.traceContent.replaceChildren(content);

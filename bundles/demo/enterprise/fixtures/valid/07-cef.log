@@ -1,0 +1,1 @@
+CEF:0|Cisco|ASA|9.18|106023|Synthetic connection event|6|src=10.24.7.27 dst=198.51.100.17 dpt=443 proto=TCP act=allow msg=synthetic-live-2026-09-29T10:20:29.000Z

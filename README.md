@@ -176,6 +176,8 @@ See the [architecture two-pager](docs/ARCHITECTURE_TWO_PAGER.md), the
 - The runtime compiles configured declarative bundles into source-profile
   pipelines. With no explicit mapping, a valid message is retained as
   `PARTIALLY_PARSED` rather than given guessed canonical meaning.
+  The Compose demo configures explicit mappings for all 14 synthetic source
+  templates across seven formats; see [demo normalization](docs/DEMO_NORMALIZATION.md).
 - The SQLite reader is deliberately bounded for small installations. Runtime
   configuration can select authenticated ClickHouse delivery and indexed
   tenant-scoped event queries; the default Compose file exercises this path.

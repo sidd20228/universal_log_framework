@@ -238,3 +238,25 @@ func copyTree(t *testing.T, source string) string {
 	}
 	return target
 }
+
+// This bundle covers the exact 14 dashboard simulation inputs, not generic
+// parser status. Compile verifies every expected canonical event and provenance.
+func TestEnterpriseDemoNormalizesAllSourceFixtures(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join("..", "..", "bundles", "demo", "enterprise")
+	descriptor, err := referenceLoader(t).LoadDirectory(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := bundlecompile.Compile(ctx, descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compiled.Pipelines()) != 7 {
+		t.Fatalf("pipelines = %d", len(compiled.Pipelines()))
+	}
+	fixtures, err := filepath.Glob(filepath.Join(root, "fixtures", "valid", "*.log"))
+	if err != nil || len(fixtures) != 14 {
+		t.Fatalf("fixtures = %d, %v", len(fixtures), err)
+	}
+}

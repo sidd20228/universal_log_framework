@@ -1,0 +1,67 @@
+{
+  "config_version": "ulpf-fingerprints/1",
+  "fingerprints": [
+    {
+      "parser_id": "demo-json",
+      "required_literals": [
+        "\"source_name\"",
+        "\"synthetic\""
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-cef",
+      "required_literals": [
+        "CEF:0|Cisco|ASA|",
+        "Synthetic connection event"
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-leef",
+      "required_literals": [
+        "LEEF:2.0|IBM|QRadar IPS|"
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-kv",
+      "required_literals": [
+        "source_name=\"NGINX Access\"",
+        "synthetic=true"
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-syslog",
+      "required_literals": [
+        "linux-syslog",
+        "[demo "
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-xml",
+      "required_literals": [
+        "<source_name>Oracle Audit</source_name>",
+        "synthetic=\"true\""
+      ],
+      "score": 950,
+      "specificity": 200
+    },
+    {
+      "parser_id": "demo-csv",
+      "required_literals": [
+        "timestamp,source_name,source_family",
+        "SaaS Audit Export"
+      ],
+      "score": 950,
+      "specificity": 200
+    }
+  ]
+}

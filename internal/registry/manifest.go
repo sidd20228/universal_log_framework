@@ -58,6 +58,7 @@ type Parser struct {
 	ID             string `json:"id"`
 	Implementation string `json:"implementation"`
 	Config         string `json:"config"`
+	Mappings       string `json:"mappings,omitempty"`
 	Priority       int    `json:"priority,omitempty"`
 }
 
@@ -148,6 +149,11 @@ func validateManifest(manifest Manifest) error {
 		if err := validateRelativePath(parser.Config); err != nil {
 			problems = append(problems, fmt.Errorf("parser %q config: %w", parser.ID, err))
 		}
+		if parser.Mappings != "" {
+			if err := validateRelativePath(parser.Mappings); err != nil {
+				problems = append(problems, fmt.Errorf("parser %q mappings: %w", parser.ID, err))
+			}
+		}
 		if parser.Priority < -1000 || parser.Priority > 1000 {
 			problems = append(problems, fmt.Errorf("parser %q priority is out of range", parser.ID))
 		}
@@ -199,6 +205,9 @@ func validateManifest(manifest Manifest) error {
 	for _, parser := range manifest.Parsers {
 		if artifactPaths[parser.Config] != "parser_config" {
 			problems = append(problems, fmt.Errorf("parser %q config is not declared as a parser_config artifact", parser.ID))
+		}
+		if parser.Mappings != "" && artifactPaths[parser.Mappings] != "mappings" {
+			problems = append(problems, fmt.Errorf("parser %q mappings is not declared as a mappings artifact", parser.ID))
 		}
 	}
 	for pathValue, role := range map[string]string{

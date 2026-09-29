@@ -1,0 +1,6 @@
+{
+  "config_version": "ulpf-builtin-parser/1",
+  "id": "demo-kv",
+  "version": "1.0.0",
+  "format": "kv"
+}

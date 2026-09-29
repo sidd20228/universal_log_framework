@@ -15,6 +15,7 @@ tmp/
 *.db-wal
 *.log
 !bundles/reference/**/fixtures/**/*.log
+!bundles/demo/**/fixtures/**/*.log
 !tests/corpus/raw/*.log
 !internal/interpret/syslog/testdata/*.log
 var/

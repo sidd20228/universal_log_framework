@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"Kubernetes Audit","source_family":"Infrastructure","action":"allow","src_ip":"10.24.4.24","dst_ip":"198.51.100.14","user":"demo-user-4","severity":"medium","synthetic":true}

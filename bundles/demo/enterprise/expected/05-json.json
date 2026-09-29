@@ -1,0 +1,13 @@
+{
+  "class_uid": 1007,
+  "class_name": "Process Activity",
+  "action": "allow",
+  "src_endpoint": {
+    "ip": "10.24.5.25"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.15"
+  },
+  "time": "2026-09-29T10:20:29Z",
+  "severity": "high"
+}

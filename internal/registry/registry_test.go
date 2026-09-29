@@ -370,3 +370,16 @@ func rewriteParserArtifact(t *testing.T, directory string, contents []byte) {
 		t.Fatal(err)
 	}
 }
+
+func TestParserMappingReferenceRequiresSafeDeclaredArtifact(t *testing.T) {
+	for _, path := range []string{"../outside.json", "missing.json", "parser.json"} {
+		t.Run(path, func(t *testing.T) {
+			directory := createBundle(t, t.TempDir(), "mapping-reference", "1.0.0", func(manifest map[string]any) {
+				manifest["parsers"].([]any)[0].(map[string]any)["mappings"] = path
+			})
+			if _, err := testLoader(t).LoadDirectory(context.Background(), directory); err == nil {
+				t.Fatal("accepted invalid parser mapping reference")
+			}
+		})
+	}
+}

@@ -447,6 +447,8 @@ FROM connector_deliveries WHERE receipt_id = ?`, receiptID).Scan(&required, &req
 		return nil
 	}
 	allowed := (current == "REVISION_COMMITTED" && (target == "DELIVERY_PENDING" || target == "DELIVERED")) ||
+		// A newly enqueued revision reopens delivery for the same receipt.
+		(current == "DELIVERED" && target == "DELIVERY_PENDING") ||
 		(current == "DELIVERY_PENDING" && (target == "DELIVERED" || target == "DEAD_LETTER")) ||
 		(current == "DEAD_LETTER" && allowDeadLetterRecovery && target == "DELIVERY_PENDING")
 	if !allowed {

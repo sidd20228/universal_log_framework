@@ -1,0 +1,340 @@
+{
+  "manifest_version": "ulpf-parser-bundle/1",
+  "bundle_id": "enterprise-demo",
+  "version": "1.0.0",
+  "description": "Explicit normalization contract for ULPF synthetic enterprise demo templates. Not a production vendor parser pack.",
+  "license": "Apache-2.0",
+  "compatibility": {
+    "envelope_schema": "ulpf-envelope/1.0.0",
+    "minimum_engine_version": "1.0.0",
+    "ocsf_version": "1.9.0"
+  },
+  "source": {
+    "kind": "synthetic",
+    "reference": "ULPF dashboard live.js sample templates",
+    "product": "ULPF enterprise simulation"
+  },
+  "parsers": [
+    {
+      "id": "demo-json",
+      "implementation": "builtin_json",
+      "config": "parsers/json.json",
+      "mappings": "mappings/json.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-cef",
+      "implementation": "builtin_cef",
+      "config": "parsers/cef.json",
+      "mappings": "mappings/cef.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-leef",
+      "implementation": "builtin_leef",
+      "config": "parsers/leef.json",
+      "mappings": "mappings/leef.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-kv",
+      "implementation": "builtin_kv",
+      "config": "parsers/kv.json",
+      "mappings": "mappings/kv.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-syslog",
+      "implementation": "builtin_syslog",
+      "config": "parsers/syslog.json",
+      "mappings": "mappings/syslog.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-xml",
+      "implementation": "builtin_xml",
+      "config": "parsers/xml.json",
+      "mappings": "mappings/xml.json",
+      "priority": 200
+    },
+    {
+      "id": "demo-csv",
+      "implementation": "builtin_csv",
+      "config": "parsers/csv.json",
+      "mappings": "mappings/csv.json",
+      "priority": 200
+    }
+  ],
+  "fingerprints": "fingerprints.json",
+  "fixtures": {
+    "valid": "fixtures/valid",
+    "invalid": "fixtures/invalid",
+    "expected": "expected"
+  },
+  "artifacts": [
+    {
+      "path": "parsers/json.json",
+      "role": "parser_config",
+      "sha256": "05a2926aca7a3aec3089018235243a7413a3435026044645255660ad8f78d53e",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/json.json",
+      "role": "mappings",
+      "sha256": "74bdc746465751e9f116e44686aea4b50b398bd21e7fbff82b4a29fd76547b17",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/cef.json",
+      "role": "parser_config",
+      "sha256": "b3709c6e787ecd18ae0e58139d938c07889ce9bc96bb6ba4e1633b872193c955",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/cef.json",
+      "role": "mappings",
+      "sha256": "6585be2a79becd48f67d3a029b65f6321650ce0cec5d68ce3817bc9694827b01",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/leef.json",
+      "role": "parser_config",
+      "sha256": "965bab213922f3dad500ba66c3fbe58c4750a75fd636b3c6307291deadf224e7",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/leef.json",
+      "role": "mappings",
+      "sha256": "a81c276d201593cd9105f1568595138a68065e05a7149e7c6644ae2614638b2b",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/kv.json",
+      "role": "parser_config",
+      "sha256": "4a221db07aba28061715af919d6c3f195909a7e5991f9ed9e672649e5b99279e",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/kv.json",
+      "role": "mappings",
+      "sha256": "38ab75f8b811095827144e3d2e7b1e10dc677e6175445ee8027e25409184d10c",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/syslog.json",
+      "role": "parser_config",
+      "sha256": "906cbd32eb6dfc946322712f32f446400b0e119aa51bfe418642eca38d436c9c",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/syslog.json",
+      "role": "mappings",
+      "sha256": "b49bcae6765622768643314bb781eb0c286f3025c92b0bf1a96302df1dac90ee",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/xml.json",
+      "role": "parser_config",
+      "sha256": "932b85af2b4ec445a45f66f6f23e5a9aa34e0f59327b690aaa19f851235c333e",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/xml.json",
+      "role": "mappings",
+      "sha256": "11b5d58f5864c3987980c0e300d1a07384be53d4fe422f0d613a1098a135e573",
+      "media_type": "application/json"
+    },
+    {
+      "path": "parsers/csv.json",
+      "role": "parser_config",
+      "sha256": "0c7cb45f948ced8e8f0b69e9a6dfaee4b36ee7e2fc2c4784b1cec84a9905cc14",
+      "media_type": "application/json"
+    },
+    {
+      "path": "mappings/csv.json",
+      "role": "mappings",
+      "sha256": "00b3b0f89eced4106363d62b0aa73436574ef06ab777dea4fe7d29f4c740846b",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fingerprints.json",
+      "role": "fingerprints",
+      "sha256": "44ee3496082839f6c250e5f327ae15b74537e4a033d6dc3450e257c1f2f26b63",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/00-json.log",
+      "role": "valid_fixture",
+      "sha256": "e86bd48f9285efc49655cd8da84b436779f605883fbafeb40e6236856aa1b0bd",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/00-json.json",
+      "role": "expected_output",
+      "sha256": "89053c0f2270c66a0031f3c5cb3827c8648cc3d21e19757fef4f29df0a3ff66a",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/01-json.log",
+      "role": "valid_fixture",
+      "sha256": "4059b8f225b3a5c9443019e19b57f46cdf8ef3e49650ada63a471df37cae9021",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/01-json.json",
+      "role": "expected_output",
+      "sha256": "6fc6ba02fb2d6ef56190f6135ca413f80fa5d9a2b9cec54cc188877e311f00c2",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/02-json.log",
+      "role": "valid_fixture",
+      "sha256": "48a9990b44d34ff4333e0b893726bc311744fbc636a493049c0b27e5700cf4e2",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/02-json.json",
+      "role": "expected_output",
+      "sha256": "be8bec36de2e1fdc3f55d8fed55d3af68b937e2cf2fc6a7c04fe4ccd8c883a7b",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/03-json.log",
+      "role": "valid_fixture",
+      "sha256": "54e84ac74a657fcc076746b35aa7d05e1d6efb643b1add1270553ccc02e87c4a",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/03-json.json",
+      "role": "expected_output",
+      "sha256": "45333e86cbacf58fbb01fcd1c851af564f7a901fad6dd4025e6e46155ace0334",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/04-json.log",
+      "role": "valid_fixture",
+      "sha256": "fe0333d1d34d3379e1ffd781f1f0ecce438b66309cd076d8e3b9f5553b2b0da2",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/04-json.json",
+      "role": "expected_output",
+      "sha256": "fcf26c7d21140b6d7386738756ebb41125b15a2dcdc01d62315efd3ed483e3f8",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/05-json.log",
+      "role": "valid_fixture",
+      "sha256": "1b5f3e6f5a38cbc074dced9d43f2012a7cf3ca6b469a41aa05406da8963a0d1e",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/05-json.json",
+      "role": "expected_output",
+      "sha256": "6c9cdbb1fc9398c05a6e76efc05cb834870a0847ff4b08c9d2f848c4b5421d62",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/06-json.log",
+      "role": "valid_fixture",
+      "sha256": "13c9ac7ec118eb9277ad8743ee0a03a7dd24d09fa2c4169bff0a8bc27b0a5d6d",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/06-json.json",
+      "role": "expected_output",
+      "sha256": "d984dd1f36e0c1b6bb7f56749f965733ce625c35e1d155af1deeba32473a207f",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/07-cef.log",
+      "role": "valid_fixture",
+      "sha256": "3acae9989f6806d542d1cb16c35111a2fc578b923b0abbe5d525ef3674a32bf6",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/07-cef.json",
+      "role": "expected_output",
+      "sha256": "bfc738d6a9195fe3d4b7399056732fd2e0c5e6aa0538517ca09f8015eb9a0834",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/08-leef.log",
+      "role": "valid_fixture",
+      "sha256": "8357d1f1f512a5925578299b02a6342f4e4d3d42f12d745dd76d1f22ca55f0a7",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/08-leef.json",
+      "role": "expected_output",
+      "sha256": "6d6d6b1eaf2a1d34ed91c85eab2255ac23c17d7cbb1dcb75776fed2190899616",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/09-kv.log",
+      "role": "valid_fixture",
+      "sha256": "9e94a54372e8db1ecd41677952ec08b963d9997efac6348f256c84add6077454",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/09-kv.json",
+      "role": "expected_output",
+      "sha256": "daf03be00a338a511090afb944b8dbc50e1499f1353884b1d5c499d489de3186",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/10-syslog.log",
+      "role": "valid_fixture",
+      "sha256": "8e47f23b107333b277d64182578f19bacc0b636de01b028770eb9a218a5ec6e7",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/10-syslog.json",
+      "role": "expected_output",
+      "sha256": "7fc649a358aebec02b015b03db1af569eae9c532e79bae4e8482efcbdb9796b4",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/11-xml.log",
+      "role": "valid_fixture",
+      "sha256": "9003598c480b8c59a24e782c37b42ac1cf436f22d09b1b9410da9c42278d91f1",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/11-xml.json",
+      "role": "expected_output",
+      "sha256": "18bb5cc20254c84dd1fd8224b35f661f8840f2e8463281a262a8348a44cd8d9f",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/12-csv.log",
+      "role": "valid_fixture",
+      "sha256": "fe39003f20a0226de907996077c3e22ea5eae7c0ab7cd703be684a054201e356",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/12-csv.json",
+      "role": "expected_output",
+      "sha256": "dbe16f3a07bc47fad65deff3dd1cd99c8bdbca101913a7d372f225439a079caa",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/valid/13-json.log",
+      "role": "valid_fixture",
+      "sha256": "f8ff9dfc45dc555ec9c3d40831a173ea7af21a9bebfb8ecab85fa15b53766400",
+      "media_type": "text/plain"
+    },
+    {
+      "path": "expected/13-json.json",
+      "role": "expected_output",
+      "sha256": "8c507220b48be09c8249a142f300cc736290c78419c7dcb108192215b24729aa",
+      "media_type": "application/json"
+    },
+    {
+      "path": "fixtures/invalid/unrelated.log",
+      "role": "invalid_fixture",
+      "sha256": "3de713c5a901964ea44044aea1744ef021048e1885c2b16867736d1aac149a55",
+      "media_type": "text/plain"
+    }
+  ]
+}

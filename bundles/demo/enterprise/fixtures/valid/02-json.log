@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"AWS CloudTrail","source_family":"Cloud","action":"allow","src_ip":"10.24.2.22","dst_ip":"198.51.100.12","user":"demo-user-2","severity":"high","synthetic":true}

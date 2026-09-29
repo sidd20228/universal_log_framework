@@ -93,8 +93,17 @@ suppress live rates until fresh measurements resume. Charts do not backfill
 fabricated history.
 Source/format/status table filters do not change scope-wide graphs. The existing
 five-minute throughput chart and status distribution remain available below.
-Without configured canonical mappings, parsed syntax can correctly appear as
-`PARTIALLY_PARSED`; the dashboard does not relabel it as fully normalized.
+The Compose demo listener uses the versioned `enterprise-demo` source profile
+and explicit normalization mappings for all 14 simulation templates. Valid demo
+inputs become `PARSED`. Missing mappings, unknown taxonomy values, or invalid
+required fields still produce `PARTIALLY_PARSED` with diagnostics; statuses are
+never promoted just for display. See [demo normalization](DEMO_NORMALIZATION.md).
+
+The status distribution and recent-event table show the latest processing
+revision of each receipt. The revision total and delivery counters include
+historical revisions. Reprocessing preserves earlier revisions and original raw
+evidence. The trace inspector shows the selected revision's mapping version,
+issue codes, canonical class, endpoint IPs, and provenance count.
 
 Developer checks: `make test-dashboard` (Node 22+, no npm dependencies) covers
 pacing, stop/restart, timeouts, rejected acknowledgements, scenario coverage,

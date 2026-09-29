@@ -9,6 +9,11 @@ listeners:
     kind: http
     address: 0.0.0.0:8080
     max_event_bytes: 1048576
+    source_profile_id: enterprise-demo
+source_profiles:
+  - id: enterprise-demo
+    tenant_id: demo
+    bundle_directory: /usr/share/ulpf/bundles/demo/enterprise
 processing:
   workers: 2
   parser_timeout: 2s

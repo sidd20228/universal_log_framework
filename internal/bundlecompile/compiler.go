@@ -145,7 +145,18 @@ func Compile(ctx context.Context, descriptor registry.Descriptor) (*Bundle, erro
 			return nil, fmt.Errorf("duplicate parser %q", declaration.ID)
 		}
 		parsers[declaration.ID] = parser
-		pipelines = append(pipelines, worker.Pipeline{Parser: parser, Mapper: mapper, BundleDigest: descriptor.Digest()})
+		parserMapper := mapper
+		if declaration.Mappings != "" {
+			mappingBytes, err := readArtifact(ctx, descriptor, artifacts, declaration.Mappings, "mappings")
+			if err != nil {
+				return nil, err
+			}
+			parserMapper, err = mapping.LoadConfig(mappingBytes)
+			if err != nil {
+				return nil, fmt.Errorf("compile parser %q mapping: %w", declaration.ID, err)
+			}
+		}
+		pipelines = append(pipelines, worker.Pipeline{Parser: parser, Mapper: parserMapper, BundleDigest: descriptor.Digest()})
 	}
 
 	if manifest.Fingerprints == "" {

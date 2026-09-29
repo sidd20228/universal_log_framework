@@ -1,0 +1,2 @@
+timestamp,source_name,source_family,src_ip,dst_ip,action,synthetic
+2026-09-29T10:20:29.000Z,SaaS Audit Export,Application,10.24.4.32,198.51.100.22,deny,true

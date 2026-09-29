@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"Windows Security","source_family":"Endpoint","action":"allow","src_ip":"10.24.1.21","dst_ip":"198.51.100.11","user":"demo-user-1","severity":"medium","synthetic":true}

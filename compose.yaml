@@ -17,6 +17,7 @@ services:
     volumes:
       - ulpf-raw:/var/lib/ulpf/raw
       - ulpf-state:/var/lib/ulpf/state
+      - ulpf-bundles:/var/lib/ulpf/bundles
       - ./configs/runtime.example.yaml:/etc/ulpf/runtime.yaml:ro
     read_only: true
     tmpfs:
@@ -83,5 +84,6 @@ services:
 volumes:
   ulpf-raw:
   ulpf-state:
+  ulpf-bundles:
   clickhouse-data:
   clickhouse-logs:

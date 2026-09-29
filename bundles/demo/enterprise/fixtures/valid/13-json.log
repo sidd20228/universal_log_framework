@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"Microsoft Entra ID","source_family":"Identity","action":"allow","src_ip":"10.24.5.33","dst_ip":"198.51.100.23","user":"demo-user-6","severity":"medium","synthetic":true}

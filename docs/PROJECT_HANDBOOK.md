@@ -130,6 +130,11 @@ Two examples are included:
 They normalize different source syntaxes into the same canonical event while
 retaining source-only fields as unmapped data.
 
+The Compose dashboard also activates the [enterprise demo bundle](DEMO_NORMALIZATION.md),
+with explicit per-parser normalization for 14 synthetic source templates across
+seven formats. This supplies canonical fields and provenance for the live
+simulation. Unknown or invalid inputs retain their real diagnostic status.
+
 Useful commands:
 
 ```bash

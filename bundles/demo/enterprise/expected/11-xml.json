@@ -1,0 +1,9 @@
+{
+  "class_uid": 6005,
+  "class_name": "Datastore Activity",
+  "action": "allow",
+  "src_endpoint": {
+    "ip": "10.24.3.31"
+  },
+  "time": "2026-09-29T10:20:29Z"
+}

@@ -2,6 +2,15 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { sample, liveTotals, Telemetry, Simulation } = require('./assets/live.js');
 
+test('normalization fixtures match every live simulation template', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  for (let i = 0; i < 14; i++) {
+    const input = sample(i, 'all', new Date('2026-09-29T10:20:29Z'));
+    const fixture = path.join(__dirname, '../../bundles/demo/enterprise/fixtures/valid', `${String(i).padStart(2, '0')}-${input.format}.log`);
+    assert.equal(fs.readFileSync(fixture, 'utf8'), input.payload, input.name);
+  }
+});
+
 function harness(send = async () => ({ receipt_id: 'receipt-1' })) {
   let now = 0, id = 0;
   const timers = new Map(), inputs = [], states = [];

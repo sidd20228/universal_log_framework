@@ -1,0 +1,12 @@
+{
+  "class_uid": 6003,
+  "class_name": "API Activity",
+  "action": "deny",
+  "src_endpoint": {
+    "ip": "10.24.4.32"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.22"
+  },
+  "time": "2026-09-29T10:20:29Z"
+}

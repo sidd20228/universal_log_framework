@@ -1,0 +1,13 @@
+{
+  "class_uid": 4001,
+  "class_name": "Network Activity",
+  "action": "deny",
+  "src_endpoint": {
+    "ip": "10.24.0.20"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.10"
+  },
+  "time": "2026-09-29T10:20:29Z",
+  "severity": "low"
+}

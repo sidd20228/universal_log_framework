@@ -20,6 +20,7 @@ func TestReceiptStateTransitionsAreExact(t *testing.T) {
 		{StateRevisionCommitted, StateDelivered}:       true,
 		{StateDeliveryPending, StateDelivered}:         true,
 		{StateDeliveryPending, StateDeadLetter}:        true,
+		{StateDelivered, StateDeliveryPending}:         true,
 		{StateDeadLetter, StateAccepted}:               true,
 		{StateDeadLetter, StateDeliveryPending}:        true,
 	}

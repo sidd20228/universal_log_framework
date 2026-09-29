@@ -1,0 +1,1 @@
+{"timestamp":"2026-09-29T10:20:29.000Z","source_name":"Okta System Log","source_family":"Identity","action":"deny","src_ip":"10.24.3.23","dst_ip":"198.51.100.13","user":"demo-user-3","severity":"low","synthetic":true}

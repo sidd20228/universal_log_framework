@@ -40,6 +40,10 @@ var receiptTransitions = map[ReceiptState]map[ReceiptState]struct{}{
 		StateDelivered:  {},
 		StateDeadLetter: {},
 	},
+	StateDelivered: {
+		// Reprocessing can commit another revision that requires delivery.
+		StateDeliveryPending: {},
+	},
 	StateDeadLetter: {
 		StateAccepted:        {},
 		StateDeliveryPending: {},

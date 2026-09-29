@@ -1,0 +1,12 @@
+{
+  "class_uid": 4002,
+  "class_name": "HTTP Activity",
+  "action": "deny",
+  "src_endpoint": {
+    "ip": "10.24.1.29"
+  },
+  "dst_endpoint": {
+    "ip": "198.51.100.19"
+  },
+  "time": "2026-09-29T10:20:29Z"
+}
