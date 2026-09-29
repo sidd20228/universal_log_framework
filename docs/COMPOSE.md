@@ -43,6 +43,11 @@ drops all Linux capabilities, and writes only to named raw/state volumes and a
 bounded temporary filesystem. Stop the stack with `docker compose down`. Add
 `--volumes` only when the retained evidence and state should be deleted.
 
+The pinned ClickHouse image starts as root only for its documented volume
+ownership setup, with every capability dropped except `CHOWN`, `SETUID`, and
+`SETGID`; its entrypoint then runs the database as UID/GID 101. The health
+check authenticates with the runtime-supplied ClickHouse credentials.
+
 Run `./scripts/test-compose.sh` for the engine-backed smoke check. It exits
 successfully with an explicit skip message when neither a working Docker
 Compose engine nor Podman Compose is available.
