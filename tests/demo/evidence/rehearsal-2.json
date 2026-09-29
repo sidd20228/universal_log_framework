@@ -1,0 +1,58 @@
+{
+  "binary": {
+    "sha256": "97fcff544da719bcf1fb671467ab94d13256a6cdf759bf300afbe4df370b588d",
+    "version": {
+      "build_date": "2026-09-29T05:43:05+05:30",
+      "commit": "a3af1691fd1e6feed3b2e225cc08ec807e5d7ecf",
+      "version": "t38-rehearsal"
+    }
+  },
+  "duration_ms": 266.164,
+  "environment": {
+    "machine": "arm64",
+    "platform": "Darwin",
+    "python": "3.9.6"
+  },
+  "evidence_version": "ulpf-local-demo/1.0.0",
+  "fixture": {
+    "path": "tests/corpus/raw/json_firewall.json",
+    "sha256": "9aaf15a078fe0d21dfb1d71315c456fff0f6e4afd80436a22700cbba537b8efb",
+    "size_bytes": 252,
+    "synthetic": true
+  },
+  "invariants": {
+    "authenticated_admission_returned_202_and_receipt": true,
+    "generic_json_fields_are_preserved_with_mapping_gap_explicit": true,
+    "health_ready_before_and_after_restart": true,
+    "query_links_receipt_to_immutable_revision": true,
+    "receipt_envelope_and_raw_sha256_match": true,
+    "restart_preserves_receipt_revision_envelope_and_raw": true,
+    "retrieved_raw_bytes_equal_fixture": true,
+    "unauthenticated_admission_rejected_without_receipt": true
+  },
+  "limit_ms": 120000,
+  "observations": {
+    "admission_status": 202,
+    "query_items": 1,
+    "unauthenticated_status": 401
+  },
+  "result": "pass",
+  "run_label": "rehearsal-2",
+  "started_at": "2026-09-29T00:18:27Z",
+  "timings_ms": {
+    "authenticated_admission": 27.444,
+    "controlled_stop_and_restart": 83.299,
+    "initial_start_and_health": 78.163,
+    "post_restart_trace": 3.04,
+    "query_envelope_and_raw_trace": 60.959,
+    "total": 266.164,
+    "unauthenticated_rejection": 0.918
+  },
+  "trace": {
+    "parser_id": "generic-json",
+    "raw_sha256": "9aaf15a078fe0d21dfb1d71315c456fff0f6e4afd80436a22700cbba537b8efb",
+    "receipt_id": "01a0ea86-f0e9-73f9-994a-2fdcd2c90895",
+    "revision_id": "01a0ea86-f109-7a37-84e0-3d8862e5a19d",
+    "status": "PARTIALLY_PARSED"
+  }
+}
