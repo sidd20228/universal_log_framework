@@ -1,40 +1,214 @@
-# Universal Log Pre-processing Framework
+# Universal Log Processing Framework
 
-ULPF is an offline-first framework for accepting perimeter-device events, preserving the exact received bytes, and producing deterministic, versioned security-event interpretations. Unknown and malformed events remain recoverable.
+ULPF accepts security-event bytes, durably stores the exact occurrence, and
+creates deterministic, versioned interpretations. A malformed or unknown
+message still has a receipt and raw SHA-256 reference, so parser failure does
+not erase the evidence.
 
-The project is under active implementation. The [implementation plan](docs/IMPLEMENTATION_PLAN.md) defines the scope, architecture, acceptance boundary, and 40-task backlog. GitHub issues are the source of truth for delivery status.
+The runnable MVP is a Go modular monolith backed by SQLite and a filesystem
+evidence store. `ulpf serve` exposes an authenticated HTTP API and processes
+accepted JSON, Syslog, CEF, LEEF, CSV, XML, and key-value messages with the
+built-in syntax parsers. The bundled Compose deployment also starts
+ClickHouse, while the self-contained API currently reads committed envelopes
+from bounded SQLite pages. The ClickHouse query and delivery adapters are
+available as packages but are not selected by `ulpf serve`.
 
-## Design commitments
+## Quick start with Compose
 
-- Durable acceptance happens before parsing or normalization.
-- Exact received bytes and occurrence identity are retained independently of parser success.
-- OCSF 1.9.0 supplies the normalized security vocabulary inside a ULPF evidence envelope.
-- Deterministic built-in parsers and declarative bundles run without cloud services or mandatory AI.
-- Unsupported semantics remain explicit instead of being guessed.
-- The MVP is a Go modular monolith with replaceable storage and delivery adapters.
+Prerequisites are Docker with Compose v2, or compatible Podman Compose, and
+`openssl` for generating development secrets.
 
-## Local development
+```sh
+git clone https://github.com/sidd20228/universal_log_framework.git
+cd universal_log_framework
+export ULPF_API_TOKEN="$(openssl rand -hex 32)"
+export CLICKHOUSE_PASSWORD="$(openssl rand -hex 32)"
+docker compose up --build --wait
+```
 
-Prerequisites: the Go version declared in `go.mod`, GNU Make, and Git.
+Check the public endpoints:
+
+```sh
+curl --fail http://127.0.0.1:8080/health/live
+curl --fail http://127.0.0.1:8080/health/ready
+```
+
+Admit one JSON occurrence. The body is sent as bytes rather than decoded by
+the HTTP layer:
+
+```sh
+response=$(curl --fail-with-body --silent \
+  -H "Authorization: Bearer $ULPF_API_TOKEN" \
+  -H 'Content-Type: application/octet-stream' \
+  --data-binary '{"event_type":"traffic","action":"allow","src_ip":"192.0.2.10"}' \
+  http://127.0.0.1:8080/api/v1/ingest)
+printf '%s\n' "$response"
+```
+
+The response contains a `receipt_id` and an `ACCEPTED` status. Processing is
+asynchronous, so poll the tenant-scoped event list until the revision appears:
+
+```sh
+curl --fail-with-body --silent \
+  -H "Authorization: Bearer $ULPF_API_TOKEN" \
+  'http://127.0.0.1:8080/api/v1/events?tenant_id=demo'
+```
+
+To retrieve the exact admitted bytes, copy `receipt_id` from the admission
+response:
+
+```sh
+receipt_id='<receipt-id>'
+curl --fail-with-body \
+  -H "Authorization: Bearer $ULPF_API_TOKEN" \
+  "http://127.0.0.1:8080/api/v1/receipts/$receipt_id/raw"
+```
+
+The single Compose token has write, event-read, and raw-read permission for
+the configured demo tenant. Library users can create separate scoped tokens;
+see [authorization](docs/AUTHORIZATION.md). Stop the services without deleting
+evidence with `docker compose down`. Adding `--volumes` deletes the named
+state, raw, and ClickHouse volumes.
+
+## Run from source
+
+Use the Go version declared in [`go.mod`](go.mod). GNU Make is convenient but
+not required.
 
 ```sh
 make check
 make build
-./bin/ulpf version
+export ULPF_API_TOKEN="$(openssl rand -hex 32)"
+mkdir -p .local/state .local/raw
+./bin/ulpf serve \
+  --listen=127.0.0.1:8080 \
+  --sqlite="$PWD/.local/state/ulpf.sqlite" \
+  --raw-root="$PWD/.local/raw" \
+  --tenant=demo \
+  --workers=2
 ```
 
-Configuration and runnable deployment instructions will be added as their tracked issues land. Do not use this repository as a production collector until the security, failure-recovery, and benchmark gates in the implementation plan are complete.
+Instead of `ULPF_API_TOKEN`, use `ULPF_API_TOKEN_FILE` or
+`--token-file=/run/secrets/ulpf-token`. The file may end with one newline.
+Supplying both a file source and the environment value is rejected. Token
+values must contain 32–512 visible ASCII characters.
 
-Parser syntax, limits, preserved fields, and format references are documented in [Built-in syntax parsers](docs/PARSERS.md).
-The MVP permission model and scope matrix are documented in [Scoped token authorization](docs/AUTHORIZATION.md).
-Listener framing and transport durability behavior are documented in [Event transports and framing](docs/TRANSPORTS.md).
+Useful commands:
 
-## Project status
+```sh
+./bin/ulpf version --json
+./bin/ulpf healthcheck --url=http://127.0.0.1:8080/health/ready
+./bin/ulpf validate-config configs/runtime.example.yaml
+```
 
-- [Day 7 Vertical Slice milestone](https://github.com/sidd20228/universal_log_framework/milestone/1)
-- [Day 14 Robust Prototype milestone](https://github.com/sidd20228/universal_log_framework/milestone/2)
-- [Open implementation issues](https://github.com/sidd20228/universal_log_framework/issues)
+`configs/runtime.example.yaml` demonstrates the strict control configuration
+schema accepted by `validate-config`. `configs/ulpf.yaml` is a separate offline
+release inventory. The current `serve` command receives runtime settings
+through flags and environment variables; it does not load either YAML file.
+
+## Architecture
+
+```text
+authenticated HTTP bytes
+          │
+          ▼
+ durable raw file ──► SQLite ACCEPTED receipt
+                           │ leased workers
+                           ▼
+              detect → parse → map → validate
+                           │
+                           ▼
+          immutable revision + evidence envelope
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+       bounded SQLite query       delivery/query adapters
+          used by serve            NDJSON/HTTP/ClickHouse
+```
+
+The acceptance boundary is the point after the raw file and SQLite receipt
+are durable. Workers claim receipts with expiring leases, verify evidence
+before reading it, and atomically commit an immutable revision and envelope.
+Every occurrence has its own receipt even when two payloads have identical
+bytes. Canonical fields require explicit mapping and per-field provenance;
+unmapped and unmatched material remains in the parsed section.
+
+The repository is split into narrow packages:
+
+| Area | Packages |
+|---|---|
+| Admission and framing | `internal/ingress`, `internal/evidence`, `internal/inbox` |
+| Detection and interpretation | `internal/detect`, `internal/interpret`, `internal/worker` |
+| Envelope and mappings | `internal/envelope`, `internal/interpret/mapping` |
+| Query and delivery | `internal/query`, `internal/deliver` |
+| Bundles and controls | `internal/registry`, `internal/control`, `internal/auth` |
+| Runtime and operations | `internal/server`, `internal/observe`, `cmd/ulpf` |
+
+See the [architecture two-pager](docs/ARCHITECTURE_TWO_PAGER.md), the
+[evidence envelope contract](docs/ENVELOPE.md), and the
+[durable-acceptance ADR](docs/adr/0001-durable-acceptance-boundary.md).
+
+## Current scope and limits
+
+- `ulpf serve` wires HTTP admission only. UDP and TCP Syslog listener packages
+  exist and are tested, but the command does not start them.
+- The built-in runtime performs syntax parsing. With no explicit mapping for a
+  format, a valid message is retained as `PARTIALLY_PARSED` rather than given
+  guessed canonical meaning.
+- The local event reader is deliberately bounded and suitable for a demo or
+  small installation. It scans at most 4,096 tenant envelopes for one filtered
+  request. Use the ClickHouse adapter when the deployment needs an indexed
+  production query path.
+- Compose starts ClickHouse and verifies its health, but `ulpf serve` does not
+  deliver revisions to it automatically.
+- Static bearer tokens are appropriate for loopback or protected private
+  networks. TLS termination, mTLS/OIDC, centralized policy, replicated
+  storage, automated retention, and automated backups remain deployment work.
+- Bundle loading, lifecycle, activation, and reprocessing are implemented as
+  Go APIs. They are not exposed as `ulpf` CLI commands or wired into `serve`.
+- Offline checksums detect corruption; the current offline builder does not
+  create a release signature or establish publisher identity.
+
+The [implementation plan](docs/IMPLEMENTATION_PLAN.md) describes the intended
+evolution beyond this boundary. Do not infer vendor certification or measured
+capacity from supported syntax names; use the checked-in benchmark workflow
+for measurements on the target host.
+
+## Operations and extension guides
+
+- [Operator guide](docs/OPERATIONS.md): startup, health, storage, backup,
+  restore, upgrades, failure recovery, and troubleshooting.
+- [Compose deployment](docs/COMPOSE.md): container startup and security
+  settings.
+- [Offline installation](docs/OFFLINE_INSTALL.md): deterministic archive
+  construction, verification, and disconnected installation limits.
+- [Query and raw API](docs/QUERY_API.md): filters, cursors, authorization, and
+  error behavior.
+- [Parser authoring](docs/PARSER_AUTHORING.md): syntax parser boundaries,
+  declarative RE2 configuration, bundle manifests, fixtures, and checksums.
+- [Built-in parsers](docs/PARSERS.md) and [bundle lifecycle](docs/BUNDLE_LIFECYCLE.md).
+- [Connector behavior](docs/CONNECTORS.md) and [container hardening](docs/CONTAINER_SECURITY.md).
+
+## Validation
+
+The default validation is offline after Go dependencies are present:
+
+```sh
+make check                 # formatting, vet, unit and integration tests
+make test-race             # race detector
+make security-smoke        # focused authorization/input/path tests
+./scripts/validate-schemas.sh
+./scripts/verify-corpus.sh
+./tests/container/test-policy.sh
+./tests/offline/test-offline-bundle.sh
+./scripts/test-compose.sh
+```
+
+Container and Compose scripts report an explicit skip when a compatible
+running engine is unavailable. The test suite includes exact-byte evidence,
+lease restart, parser limit, tenant isolation, raw authorization, SQLite
+pagination bounds, and JSON/Syslog admission-to-query coverage.
 
 ## License
 
-Licensed under the Apache License 2.0. See `LICENSE`.
+Licensed under the Apache License 2.0. See [`LICENSE`](LICENSE).
