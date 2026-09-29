@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,9 +130,10 @@ func TestWorkerRestartReclaimsExpiredLeaseWithoutDuplicatingOccurrence(t *testin
 
 func TestWorkerRenewsLeaseDuringLongParse(t *testing.T) {
 	queue, evidenceStore, _ := setupDurableReceipt(t, readFixture(t, "json_firewall.json"))
+	gatedQueue := &renewalNotifyingInbox{Inbox: queue, renewed: make(chan struct{})}
 	mapper := newFirewallMapper(t)
 	resolver, err := worker.NewStaticResolver([]worker.Pipeline{{
-		Parser: delayedParser{delay: 180 * time.Millisecond, delegate: jsonparser.New()}, Mapper: mapper,
+		Parser: renewalGatedParser{renewed: gatedQueue.renewed, delegate: jsonparser.New()}, Mapper: mapper,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -141,10 +143,10 @@ func TestWorkerRenewsLeaseDuringLongParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	processor, err := worker.New(worker.Config{
-		Owner: "renew-worker", PipelineVersion: "0.1.0", LeaseDuration: 70 * time.Millisecond,
-		RenewInterval: 15 * time.Millisecond, ProcessingTimeout: time.Second, MaxAttempts: 2,
+		Owner: "renew-worker", PipelineVersion: "0.1.0", LeaseDuration: 30 * time.Second,
+		RenewInterval: 10 * time.Millisecond, ProcessingTimeout: 2 * time.Second, MaxAttempts: 2,
 		RevisionID: fixedRevisionIDs("0199a1f0-81b2-7680-89c3-d5c53fe8e103"),
-	}, queue, evidenceStore, detector, resolver)
+	}, gatedQueue, evidenceStore, detector, resolver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,19 +351,33 @@ func fixedRevisionIDs(ids ...string) worker.RevisionIDGenerator {
 	}
 }
 
-type delayedParser struct {
-	delay    time.Duration
+type renewalNotifyingInbox struct {
+	worker.Inbox
+	renewed chan struct{}
+	once    sync.Once
+}
+
+func (queue *renewalNotifyingInbox) RenewLease(ctx context.Context, receiptID, owner string, now time.Time, duration time.Duration) error {
+	err := queue.Inbox.RenewLease(ctx, receiptID, owner, now, duration)
+	if err == nil {
+		queue.once.Do(func() { close(queue.renewed) })
+	}
+	return err
+}
+
+type renewalGatedParser struct {
+	renewed  <-chan struct{}
 	delegate interpret.SyntaxParser
 }
 
-func (parser delayedParser) Descriptor() interpret.ParserDescriptor {
+func (parser renewalGatedParser) Descriptor() interpret.ParserDescriptor {
 	return parser.delegate.Descriptor()
 }
-func (parser delayedParser) Parse(ctx context.Context, payload interpret.Payload, limits interpret.Limits) interpret.ParseResult {
+func (parser renewalGatedParser) Parse(ctx context.Context, payload interpret.Payload, limits interpret.Limits) interpret.ParseResult {
 	select {
 	case <-ctx.Done():
 		return interpret.ParseResult{Status: interpret.StatusInvalid, Document: interpret.ParsedDocument{Format: "json"}, Issues: []interpret.Issue{{Code: "TEST_CANCELLED", Severity: interpret.SeverityError, Message: ctx.Err().Error()}}}
-	case <-time.After(parser.delay):
+	case <-parser.renewed:
 		return parser.delegate.Parse(ctx, payload, limits)
 	}
 }
