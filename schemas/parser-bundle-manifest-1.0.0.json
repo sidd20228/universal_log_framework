@@ -249,8 +249,7 @@
       "properties": {
         "algorithm": {
           "enum": [
-            "cosign",
-            "minisign"
+            "ed25519"
           ]
         },
         "key_id": {

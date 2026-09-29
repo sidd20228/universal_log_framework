@@ -173,6 +173,24 @@ func TestHTTPHandlerNeverReturns202OnDurabilityFailure(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerReturnsCapacityPolicyCode(t *testing.T) {
+	coordinator := fixedCoordinator(t, &memoryEvidence{}, &memoryInbox{}, 1024)
+	coordinator.capacity = failingCapacity{err: errors.New("high watermark")}
+	handler, err := NewHTTPHandler(coordinator, HTTPHandlerConfig{TenantID: "tenant-a", ListenerID: "http", MaxEventBytes: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", bytes.NewReader([]byte("event")))
+	request.Header.Set("Content-Type", "application/octet-stream")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	var body errorResponse
+	_ = json.NewDecoder(response.Body).Decode(&body)
+	if response.Code != http.StatusInsufficientStorage || body.Code != "DISK_HIGH_WATERMARK" {
+		t.Fatalf("status=%d body=%+v", response.Code, body)
+	}
+}
+
 func TestHTTPHandlerPropagatesCancellation(t *testing.T) {
 	handler := testHTTPHandler(t, &memoryEvidence{}, &memoryInbox{}, 1024)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader([]byte("event")))

@@ -73,10 +73,21 @@ curl --fail --silent http://127.0.0.1:8080/health/ready
 ```
 
 Liveness means the HTTP process can answer. Readiness becomes successful once
-the listener and worker pool are running, and becomes unavailable during
-shutdown. It is not currently a continuous free-space or ClickHouse probe.
-Admission reports filesystem or SQLite failures on the request that encounters
-them. Monitor storage capacity independently and alert before exhaustion.
+the listener and worker pool are running. It becomes unavailable during
+shutdown, when a required connector health check fails, when the raw filesystem
+cannot be measured, or when the configured disk high watermark is reached.
+
+The authenticated Prometheus endpoint requires `ops:read`:
+
+```sh
+curl --fail -H "Authorization: Bearer $ULPF_API_TOKEN" \
+  http://127.0.0.1:8080/metrics
+```
+
+It reports admissions, receipt states, connector delivery states, raw disk
+usage and admission blocking, reconciliation findings, retention totals, and
+last successful maintenance timestamps. Metrics use bounded labels and do not
+contain receipt IDs, event data, tokens, or error text.
 
 ClickHouse has its own Compose health check. The default Compose runtime uses
 ClickHouse for delivery and event queries; verify application-level delivery
@@ -136,47 +147,114 @@ restart because that deletes durable data.
 
 ## Backup
 
-The repository does not yet provide a backup command or scheduled backup job.
-Use a storage snapshot procedure that your organization has tested. The raw
-volume and SQLite state form one evidence set and must share a documented
-backup point.
+The SQLite database and raw evidence form one evidence set. Stop ULPF before a
+supported backup so retention and new admission cannot race the raw inventory:
 
-For a simple stopped-process backup:
+```sh
+ulpf backup create \
+  --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --raw-root /var/lib/ulpf/raw \
+  --backup /mnt/backup/ulpf-2026-09-29
 
-1. Stop ULPF and verify the process is no longer writing.
-2. Snapshot or copy the entire state directory, including the SQLite database
-   and any `-wal` or `-shm` files that remain.
-3. Snapshot or copy the entire raw evidence root without dereferencing or
-   introducing symbolic links.
-4. Record checksums, ownership, modes, source version, schema migration list,
-   and backup time.
-5. Back up ClickHouse separately when it is configured as a delivery/query
-   backend, as it is in the default Compose deployment.
-6. Restart ULPF and verify readiness and a known receipt/raw hash.
+ulpf backup verify --backup /mnt/backup/ulpf-2026-09-29
+```
 
-Do not copy only `ulpf.sqlite` while the service is live. A filesystem copy of
-a live WAL database can omit committed pages. If online backup is required,
-use a reviewed SQLite backup/snapshot mechanism and prove restoration in a
-test environment.
+The command creates a consistent SQLite snapshot with `VACUUM INTO`, copies
+only raw objects marked available by that snapshot, verifies every raw hash and
+size, and writes a checksummed inventory. Verification checks every inventory
+file, SQLite `integrity_check`, receipt counts, and every available raw
+reference. Back up ClickHouse separately when it is the query backend; it can
+be rebuilt from connector replay but is not included in this local backup set.
 
 ## Restore
 
 1. Stop ULPF and preserve the failed volumes for investigation.
-2. Verify backup inventory and checksums before copying.
-3. Restore the matching state and raw snapshots with ownership usable by UID
-   65532 in Compose.
+2. Restore into new, empty destinations; the command refuses to overwrite:
+
+   ```sh
+   ulpf backup restore --backup /mnt/backup/ulpf-2026-09-29 \
+     --sqlite /var/lib/ulpf-restored/state/ulpf.sqlite \
+     --raw-root /var/lib/ulpf-restored/raw
+   ```
+
+3. Set ownership usable by UID 65532 in Compose.
 4. Start the same application version that created the backup. Startup applies
    embedded forward migrations when needed; migrations are not reversible.
 5. Check live/ready, retrieve a known receipt, retrieve and hash its raw bytes,
    and query its known revision.
 6. Upgrade only after the baseline restore is proven.
 
-Restoring SQLite without its matching raw tree can produce accepted receipts
-whose evidence is unavailable. Restoring raw files without their receipts can
-produce orphans. The evidence package exposes reconciliation primitives, but
-`ulpf serve` does not currently run an operator reconciliation command; retain
-both sides and investigate instead of manufacturing receipts or deleting files
-manually.
+Never restore SQLite or raw files alone. The restore command verifies the pair
+before copying. Retain both failed sides and investigate instead of
+manufacturing receipts or deleting files manually.
+
+## Recovery drill and RPO/RTO evidence
+
+Run this on every backup class and after storage changes:
+
+```sh
+ulpf backup drill --backup /mnt/backup/ulpf-2026-09-29 \
+  --actor operator@example.test \
+  --report /mnt/audit/recovery-drill-2026-09-29.json
+```
+
+The drill restores into an isolated temporary directory, verifies the complete
+set, and writes a read-only JSON report plus a SHA-256 sidecar containing the actor, backup-manifest
+hash, start/completion times, receipt/raw counts, measured restore time (RTO),
+and the interval from the newest receipt to backup creation (observed backup
+capture lag/RPO evidence). This is evidence for the tested single-node backup;
+it is not an HA or disaster-site guarantee.
+
+## Raw evidence reconciliation
+
+The runtime performs reconciliation at startup and every five minutes. It
+removes stale temporary files, quarantines aged orphan objects, and verifies
+every raw reference still marked available. Missing and corrupt references are
+reported as metrics and are never silently repaired or deleted. Run an
+operator check while the service is stopped with:
+
+```sh
+ulpf maintenance reconcile --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --raw-root /var/lib/ulpf/raw --actor operator@example.test
+```
+
+Every reconciliation appends a bounded audit record to SQLite.
+
+## Retention and forensic holds
+
+Retention only expires raw evidence for terminal `DELIVERED` or `DEAD_LETTER`
+receipts older than the configured `raw_days`. Immutable receipt, revision,
+hash, size, and lineage metadata remain queryable. Active receipt or tenant
+holds override expiry.
+
+```sh
+ulpf retention hold-create --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --tenant demo --receipt <receipt-id> --reason 'IR case 42' \
+  --actor analyst@example.test
+
+ulpf retention hold-list --sqlite /var/lib/ulpf/state/ulpf.sqlite --tenant demo
+
+ulpf retention run --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --raw-root /var/lib/ulpf/raw --tenant demo --raw-days 7 \
+  --actor operator@example.test
+
+ulpf retention hold-release --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --tenant demo --hold-id <hold-id> --actor analyst@example.test
+```
+
+The runtime applies the configured raw retention window periodically. Expiry
+verifies bytes before deletion, marks the raw reference unavailable, and
+records the count and bytes freed in metrics and the operation audit.
+
+## Capacity alerts
+
+Load [the bundled Prometheus rules](../deployments/monitoring/ulpf-alerts.yaml)
+and route warning/critical severities to an owned response channel. The rules
+cover disk pressure and blocked admission, raw integrity failures, stale
+reconciliation, required connector dead letters, backlog, and capacity
+rejections. Tune the backlog threshold to measured local throughput; keep the
+disk warning below `storage.high_watermark_percent` so operators have time to
+create a verified backup, review holds, and run retention.
 
 ## Upgrade and rollback
 

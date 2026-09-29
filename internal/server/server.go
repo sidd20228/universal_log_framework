@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"github.com/sidd20228/universal_log_framework/internal/auth"
 	"github.com/sidd20228/universal_log_framework/internal/bundleadmin"
 	"github.com/sidd20228/universal_log_framework/internal/bundlecompile"
+	"github.com/sidd20228/universal_log_framework/internal/capacity"
 	"github.com/sidd20228/universal_log_framework/internal/dashboard"
 	"github.com/sidd20228/universal_log_framework/internal/dashboardapi"
 	"github.com/sidd20228/universal_log_framework/internal/deliver"
@@ -38,6 +40,7 @@ import (
 	"github.com/sidd20228/universal_log_framework/internal/interpret/kv"
 	"github.com/sidd20228/universal_log_framework/internal/interpret/syslog"
 	"github.com/sidd20228/universal_log_framework/internal/interpret/xml"
+	"github.com/sidd20228/universal_log_framework/internal/maintenance"
 	"github.com/sidd20228/universal_log_framework/internal/query"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
 	"github.com/sidd20228/universal_log_framework/internal/reprocess"
@@ -45,24 +48,29 @@ import (
 )
 
 type Config struct {
-	Address             string
-	SQLitePath          string
-	RawRoot             string
-	TenantID            string
-	EnvironmentID       string
-	InstanceID          string
-	ListenerID          string
-	SourceProfileID     string
-	SourceProfileByCIDR map[string]string
-	FederationPeers     []dashboardapi.FederationPeer
-	BundleRoot          string
-	SourceBundles       []SourceBundle
-	Connectors          []ConnectorConfig
-	Token               string
-	Workers             int
-	MaxEventBytes       int64
-	ProcessingTimeout   time.Duration
-	ShutdownTimeout     time.Duration
+	Address                 string
+	SQLitePath              string
+	RawRoot                 string
+	TenantID                string
+	EnvironmentID           string
+	InstanceID              string
+	ListenerID              string
+	SourceProfileID         string
+	SourceProfileByCIDR     map[string]string
+	FederationPeers         []dashboardapi.FederationPeer
+	BundleRoot              string
+	BundleTrustRoots        map[string]ed25519.PublicKey
+	RequireBundleSignatures bool
+	SourceBundles           []SourceBundle
+	Connectors              []ConnectorConfig
+	Token                   string
+	Workers                 int
+	MaxEventBytes           int64
+	ProcessingTimeout       time.Duration
+	ShutdownTimeout         time.Duration
+	HighWatermarkPercent    int
+	RawRetentionDays        int
+	MaintenanceInterval     time.Duration
 }
 
 type ConnectorConfig struct {
@@ -101,6 +109,9 @@ type Service struct {
 	connectors          []deliver.Connector
 	deliveryTargets     []deliver.ConnectorTarget
 	connectorClosers    []interface{ Close() error }
+	capacity            *capacity.DiskGuard
+	maintenance         *maintenance.Manager
+	metrics             *runtimeMetrics
 	ready               atomic.Bool
 	closed              atomic.Bool
 }
@@ -133,6 +144,21 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	if config.ShutdownTimeout <= 0 {
 		config.ShutdownTimeout = 10 * time.Second
 	}
+	if config.HighWatermarkPercent == 0 {
+		config.HighWatermarkPercent = 95
+	}
+	if config.HighWatermarkPercent < 1 || config.HighWatermarkPercent > 99 {
+		return nil, errors.New("storage high watermark must be between 1 and 99")
+	}
+	if config.RawRetentionDays == 0 {
+		config.RawRetentionDays = 7
+	}
+	if config.RawRetentionDays < 1 {
+		return nil, errors.New("raw retention days must be positive")
+	}
+	if config.MaintenanceInterval <= 0 {
+		config.MaintenanceInterval = 5 * time.Minute
+	}
 	if config.SQLitePath == "" || config.RawRoot == "" {
 		return nil, errors.New("SQLite path and raw evidence root are required")
 	}
@@ -140,6 +166,10 @@ func New(ctx context.Context, config Config) (*Service, error) {
 		return nil, fmt.Errorf("create SQLite directory: %w", err)
 	}
 	raw, err := evidence.NewFilesystem(config.RawRoot)
+	if err != nil {
+		return nil, err
+	}
+	diskGuard, err := capacity.NewDiskGuard(config.RawRoot, config.HighWatermarkPercent)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +194,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	if err != nil {
 		return fail(fmt.Errorf("configure API token: %w", err))
 	}
-	coordinator, err := ingress.NewCoordinator(raw, queue, config.MaxEventBytes)
+	coordinator, err := ingress.NewCoordinatorWithCapacity(raw, queue, config.MaxEventBytes, diskGuard)
 	if err != nil {
 		return fail(err)
 	}
@@ -193,6 +223,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	}
 	connectors := make([]deliver.Connector, 0, len(config.Connectors))
 	deliveryTargets := make([]deliver.ConnectorTarget, 0, len(config.Connectors))
+	connectorIDs := make([]string, 0, len(config.Connectors))
 	var connectorClosers []interface{ Close() error }
 	for _, specification := range config.Connectors {
 		connector, closer, buildErr := buildConnector(specification)
@@ -200,6 +231,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 			return fail(buildErr)
 		}
 		connectors = append(connectors, connector)
+		connectorIDs = append(connectorIDs, specification.ID)
 		deliveryTargets = append(deliveryTargets, deliver.ConnectorTarget{Connector: connector, Required: specification.Required})
 		if closer != nil {
 			connectorClosers = append(connectorClosers, closer)
@@ -246,7 +278,7 @@ func New(ctx context.Context, config Config) (*Service, error) {
 		if config.BundleRoot == "" {
 			return fail(errors.New("bundle root is required when source bundles are configured"))
 		}
-		loader, loaderErr := registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: envelope.SchemaVersion, OCSFVersion: "1.9.0"})
+		loader, loaderErr := registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: envelope.SchemaVersion, OCSFVersion: "1.9.0", TrustRoots: config.BundleTrustRoots, RequireSignature: config.RequireBundleSignatures})
 		if loaderErr != nil {
 			return fail(loaderErr)
 		}
@@ -296,7 +328,16 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	}
 	service := &Service{config: config, inbox: queue, dashboard: dashboardReader, raw: raw, workers: workers, lifecycle: lifecycle, router: router,
 		reprocess:     reprocessExecutor,
-		deliveryStore: deliveryStore, deliveryCoordinator: deliveryCoordinator, connectors: connectors, deliveryTargets: deliveryTargets, connectorClosers: connectorClosers}
+		deliveryStore: deliveryStore, deliveryCoordinator: deliveryCoordinator, connectors: connectors, deliveryTargets: deliveryTargets, connectorClosers: connectorClosers,
+		capacity: diskGuard}
+	service.maintenance, err = maintenance.New(queue, raw)
+	if err != nil {
+		return fail(err)
+	}
+	service.metrics, err = newRuntimeMetrics(queue, deliveryStore, diskGuard, config.TenantID, deliveryTargets)
+	if err != nil {
+		return fail(err)
+	}
 	deliveryOps, err := deliver.NewOpsHTTP(deliveryStore, config.TenantID)
 	if err != nil {
 		return fail(err)
@@ -306,7 +347,8 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	mux.Handle("/health/ready", http.HandlerFunc(service.readiness))
 	mux.Handle("/dashboard", dashboard.Handler())
 	mux.Handle("/dashboard/", dashboard.Handler())
-	mux.Handle("/api/v1/ingest", auth.RequireHTTP(authorizer, auth.ScopeEventsWrite, func(*http.Request) string { return config.TenantID }, admission))
+	mux.Handle("/api/v1/ingest", auth.RequireHTTP(authorizer, auth.ScopeEventsWrite, func(*http.Request) string { return config.TenantID }, service.metrics.observeAdmission(admission)))
+	mux.Handle("/metrics", auth.RequireHTTP(authorizer, auth.ScopeOpsRead, func(*http.Request) string { return config.TenantID }, service.metrics))
 	mux.Handle("/api/v1/dashboard/summary", dashboardHTTP)
 	tenantFromQuery := func(request *http.Request) string { return request.URL.Query().Get("tenant_id") }
 	mux.Handle("/api/v1/connectors/status", auth.RequireHTTP(authorizer, auth.ScopeOpsRead, tenantFromQuery, http.HandlerFunc(deliveryOps.Status)))
@@ -351,6 +393,11 @@ func (service *Service) Serve(ctx context.Context, listener net.Listener) error 
 			service.runWorker(ctx, processor)
 		}(processor)
 	}
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
+		service.runMaintenance(ctx)
+	}()
 	if service.reprocess != nil {
 		workers.Add(1)
 		go func() {
@@ -396,6 +443,37 @@ func (service *Service) Serve(ctx context.Context, listener net.Listener) error 
 			return err
 		}
 		return nil
+	}
+}
+
+func (service *Service) runMaintenance(ctx context.Context) {
+	reconcile := func() {
+		now := time.Now().UTC()
+		if report, err := service.maintenance.Reconcile(ctx, "ulpf-runtime", now); err == nil {
+			service.metrics.recordReconcile(report)
+		}
+	}
+	retention := func() {
+		now := time.Now().UTC()
+		if report, err := service.maintenance.RunRetention(ctx, service.config.TenantID, "ulpf-runtime", service.config.RawRetentionDays, now); err == nil {
+			service.metrics.recordRetention(report)
+		}
+	}
+	reconcile()
+	retention()
+	reconcileTicker := time.NewTicker(service.config.MaintenanceInterval)
+	retentionTicker := time.NewTicker(24 * time.Hour)
+	defer reconcileTicker.Stop()
+	defer retentionTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-reconcileTicker.C:
+			reconcile()
+		case <-retentionTicker.C:
+			retention()
+		}
 	}
 }
 
@@ -546,6 +624,11 @@ func (service *Service) readiness(writer http.ResponseWriter, request *http.Requ
 	if !service.ready.Load() {
 		writer.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = writer.Write([]byte("{\"status\":\"not_ready\"}\n"))
+		return
+	}
+	if err := service.capacity.Check(request.Context()); err != nil {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write([]byte("{\"status\":\"not_ready\",\"code\":\"DISK_HIGH_WATERMARK\"}\n"))
 		return
 	}
 	healthContext, cancel := context.WithTimeout(request.Context(), 2*time.Second)

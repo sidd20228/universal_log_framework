@@ -333,6 +333,37 @@ func TestCommitRevisionIsIdempotentByProcessingInputs(t *testing.T) {
 	}
 }
 
+func TestOperationalMetricsReportQueueAgeAndParserStatus(t *testing.T) {
+	store, _ := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	receipt := testReceipt("receipt-metrics", now.Add(-45*time.Second))
+	if err := store.InsertReceipt(ctx, receipt); err != nil {
+		t.Fatal(err)
+	}
+	age, err := store.OldestActiveReceiptAge(ctx, receipt.TenantID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if age != 45*time.Second {
+		t.Fatalf("oldest age = %s, want 45s", age)
+	}
+	if _, err := store.Claim(ctx, "worker-a", now, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	revision := testRevision("revision-metrics", receipt.ID, strings.Repeat("b", 64), now)
+	if _, _, err := store.CommitRevision(ctx, revision, "worker-a"); err != nil {
+		t.Fatal(err)
+	}
+	counts, err := store.RevisionStatusCounts(ctx, receipt.TenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts[model.StatusParsed] != 1 {
+		t.Fatalf("parser status counts = %#v", counts)
+	}
+}
+
 func TestReceiptPersistsAcrossRestart(t *testing.T) {
 	store, path := openTestStore(t)
 	ctx := context.Background()

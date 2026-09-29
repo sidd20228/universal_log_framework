@@ -2,7 +2,10 @@ package registry_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,6 +89,76 @@ func TestLoaderRejectsChecksumMismatchAndTampering(t *testing.T) {
 	_, err := testLoader(t).LoadDirectory(context.Background(), directory)
 	if !errors.Is(err, registry.ErrArtifactIntegrity) {
 		t.Fatalf("LoadDirectory() error = %v, want ErrArtifactIntegrity", err)
+	}
+}
+
+func TestLoaderVerifiesEd25519SignatureAgainstTrustRoots(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := createBundle(t, t.TempDir(), "signed", "1.0.0", func(manifest map[string]any) {
+		manifest["signature"] = map[string]any{"algorithm": "ed25519", "key_id": "publisher-a", "file": "bundle.sig"}
+	})
+	if err := os.WriteFile(filepath.Join(directory, "bundle.sig"), []byte("pending"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := registry.SigningPayload(context.Background(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload)) + "\n"
+	if err := os.WriteFile(filepath.Join(directory, "bundle.sig"), []byte(signature), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loader, err := registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: "ulpf-envelope/1.0.0", OCSFVersion: "1.9.0",
+		TrustRoots: map[string]ed25519.PublicKey{"publisher-a": publicKey}, RequireSignature: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loader.LoadDirectory(context.Background(), directory); err != nil {
+		t.Fatalf("signed bundle rejected: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(directory, "bundle.sig"), []byte(base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loader.LoadDirectory(context.Background(), directory); !errors.Is(err, registry.ErrSignatureInvalid) {
+		t.Fatalf("tampered signature error = %v", err)
+	}
+	unknown, err := registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: "ulpf-envelope/1.0.0", OCSFVersion: "1.9.0",
+		TrustRoots: map[string]ed25519.PublicKey{"publisher-b": publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unknown.LoadDirectory(context.Background(), directory); !errors.Is(err, registry.ErrSignatureUntrusted) {
+		t.Fatalf("unknown key error = %v", err)
+	}
+}
+
+func TestLoaderRequiresSignatureWhenPolicyEnabled(t *testing.T) {
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := createBundle(t, t.TempDir(), "unsigned", "1.0.0", nil)
+	loader, err := registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: "ulpf-envelope/1.0.0", OCSFVersion: "1.9.0",
+		TrustRoots: map[string]ed25519.PublicKey{"publisher-a": publicKey}, RequireSignature: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loader.LoadDirectory(context.Background(), directory); !errors.Is(err, registry.ErrSignatureRequired) {
+		t.Fatalf("unsigned error = %v", err)
+	}
+}
+
+func TestLoaderRejectsSignaturePathCollision(t *testing.T) {
+	directory := createBundle(t, t.TempDir(), "collision", "1.0.0", func(manifest map[string]any) {
+		manifest["signature"] = map[string]any{"algorithm": "ed25519", "key_id": "publisher-a", "file": "parser.json"}
+	})
+	_, err := testLoader(t).LoadDirectory(context.Background(), directory)
+	if !errors.Is(err, registry.ErrInvalidManifest) {
+		t.Fatalf("collision error = %v", err)
 	}
 }
 

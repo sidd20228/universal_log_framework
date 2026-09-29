@@ -123,7 +123,16 @@ print(digest.hexdigest())
 PY
 )
   finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  python3 - "$ULPF_OFFLINE_EVIDENCE_PATH" "$archive_sha256" "$architecture" "$receipt_id" "$started_at" "$finished_at" "$image_ids" <<'PY'
+  release_identity=$(python3 - "$install_dir/manifest.json" <<'PY'
+import json, sys
+release = json.load(open(sys.argv[1], encoding="utf-8"))["release"]
+print(release["version"])
+print(release["source_commit"])
+PY
+)
+  release_version=$(printf '%s\n' "$release_identity" | sed -n '1p')
+  source_commit=$(printf '%s\n' "$release_identity" | sed -n '2p')
+  python3 - "$ULPF_OFFLINE_EVIDENCE_PATH" "$archive_sha256" "$architecture" "$receipt_id" "$started_at" "$finished_at" "$image_ids" "$release_version" "$source_commit" <<'PY'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 path.parent.mkdir(parents=True, exist_ok=True)
@@ -135,6 +144,8 @@ value = {
     "started_at": sys.argv[5],
     "finished_at": sys.argv[6],
     "image_ids": sorted(line for line in sys.argv[7].splitlines() if line),
+    "release_version": sys.argv[8],
+    "source_commit": sys.argv[9],
     "controls": {"pull_policy_never": True, "clean_release_tags": True, "container_egress_denied": True},
     "checks": {"signature": True, "ingest": True, "query": True, "dashboard": True, "restart_persistence": True},
 }

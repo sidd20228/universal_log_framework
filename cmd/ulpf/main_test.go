@@ -2,10 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sidd20228/universal_log_framework/internal/registry"
 )
 
 func TestVersionCommand(t *testing.T) {
@@ -111,5 +118,110 @@ func TestBundleValidateAndInstallCommands(t *testing.T) {
 	stderr.Reset()
 	if code := run([]string{"bundle", "install", "--sqlite", filepath.Join(root, "state.sqlite"), "--catalog", filepath.Join(root, "catalog"), bundle}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), `"bundle_id":"reference-json-firewall"`) {
 		t.Fatalf("bundle install code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestBundleScaffoldTestAndSignaturePolicy(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "starter")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"bundle", "scaffold", "--id", "starter-firewall", "--format", "json", directory}, &stdout, &stderr); code != 0 {
+		t.Fatalf("scaffold code=%d stderr=%s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"bundle", "test", "--json", directory}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), `"status":"tested"`) {
+		t.Fatalf("test code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"bundle", "scaffold", "--id", "starter-firewall", "--format", "json", directory}, &stdout, &stderr); code != 0 {
+		t.Fatalf("idempotent scaffold code=%d stderr=%s", code, stderr.String())
+	}
+
+	manifestPath := filepath.Join(directory, "manifest.json")
+	encoded, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(encoded, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["signature"] = map[string]any{"algorithm": "ed25519", "key_id": "publisher-a", "file": "bundle.sig"}
+	encoded, _ = json.MarshalIndent(manifest, "", "  ")
+	encoded = append(encoded, '\n')
+	if err := os.WriteFile(manifestPath, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "bundle.sig"), []byte("pending"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := registry.SigningPayload(context.Background(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "bundle.sig"), []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keyPath := filepath.Join(t.TempDir(), "publisher.pub")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(publicKey)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"bundle", "test", "--require-signature", "--trust-root", "publisher-a=" + keyPath, directory}, &stdout, &stderr); code != 0 {
+		t.Fatalf("signed test code=%d stderr=%s", code, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"bundle", "test", directory}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "not trusted") {
+		t.Fatalf("untrusted test code=%d stderr=%s", code, stderr.String())
+	}
+}
+
+func TestBundleRollbackCommand(t *testing.T) {
+	root := t.TempDir()
+	t.Cleanup(func() {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err == nil {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
+	sqlitePath, catalog := filepath.Join(root, "state.sqlite"), filepath.Join(root, "catalog")
+	install := func(bundle string) registry.InstalledBundle {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"bundle", "install", "--sqlite", sqlitePath, "--catalog", catalog, bundle}, &stdout, &stderr); code != 0 {
+			t.Fatalf("install code=%d stderr=%s", code, stderr.String())
+		}
+		var installed registry.InstalledBundle
+		if err := json.Unmarshal(stdout.Bytes(), &installed); err != nil {
+			t.Fatal(err)
+		}
+		return installed
+	}
+	jsonBundle := install(filepath.Join("..", "..", "bundles", "reference", "json-firewall"))
+	kvBundle := install(filepath.Join("..", "..", "bundles", "reference", "kv-firewall"))
+	command := func(name, digest, revision string) registry.Activation {
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"bundle", name, "--sqlite", sqlitePath, "--catalog", catalog, "--source-profile", "edge", "--sha256", digest, "--expected-revision", revision}, &stdout, &stderr); code != 0 {
+			t.Fatalf("%s code=%d stderr=%s", name, code, stderr.String())
+		}
+		var activation registry.Activation
+		if err := json.Unmarshal(stdout.Bytes(), &activation); err != nil {
+			t.Fatal(err)
+		}
+		return activation
+	}
+	command("activate", jsonBundle.Digest, "0")
+	command("activate", kvBundle.Digest, "1")
+	rolledBack := command("rollback", jsonBundle.Digest, "2")
+	if rolledBack.BundleDigest != jsonBundle.Digest || rolledBack.ConfigRevision != 3 {
+		t.Fatalf("rollback = %+v", rolledBack)
 	}
 }

@@ -157,6 +157,24 @@ func TestAdmissionDoesNotAcceptOnEvidenceFailure(t *testing.T) {
 	}
 }
 
+func TestAdmissionChecksCapacityBeforeWritingEvidence(t *testing.T) {
+	evidence := &memoryEvidence{}
+	inbox := &memoryInbox{}
+	coordinator := fixedCoordinator(t, evidence, inbox, 1024)
+	coordinator.capacity = failingCapacity{err: errors.New("high watermark")}
+	_, err := coordinator.Admit(context.Background(), testAdmissionRequest([]byte("event")))
+	if !errors.Is(err, ErrCapacity) {
+		t.Fatalf("Admit error=%v, want ErrCapacity", err)
+	}
+	if evidence.calls != 0 || inbox.count() != 0 {
+		t.Fatal("capacity rejection reached durable stores")
+	}
+}
+
+type failingCapacity struct{ err error }
+
+func (guard failingCapacity) Check(context.Context) error { return guard.err }
+
 func TestAdmissionReportsOrphanWithoutAcceptanceOnInboxFailure(t *testing.T) {
 	evidence := &memoryEvidence{}
 	inbox := &memoryInbox{insertErr: errors.New("database unavailable")}

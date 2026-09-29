@@ -134,6 +134,8 @@ func (handler *httpHandler) writeAdmissionError(writer http.ResponseWriter, err 
 		writeJSONError(writer, http.StatusRequestTimeout, "REQUEST_CANCELLED", "request was cancelled", requestID)
 	case errors.Is(err, ErrEvidenceWrite):
 		writeJSONError(writer, http.StatusInsufficientStorage, "EVIDENCE_UNAVAILABLE", "durable evidence storage is unavailable", requestID)
+	case errors.Is(err, ErrCapacity):
+		writeJSONError(writer, http.StatusInsufficientStorage, "DISK_HIGH_WATERMARK", "admission is paused by the storage capacity policy", requestID)
 	case errors.Is(err, ErrInboxWrite):
 		writeJSONError(writer, http.StatusServiceUnavailable, "INBOX_UNAVAILABLE", "event was not accepted", requestID)
 	case errors.Is(err, ErrInvalidRequest):

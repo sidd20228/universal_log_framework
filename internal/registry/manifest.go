@@ -16,6 +16,9 @@ var (
 	ErrExecutableImplementation = errors.New("executable parser implementation is forbidden")
 	ErrIncompatible             = errors.New("bundle is incompatible with this runtime")
 	ErrInvalidManifest          = errors.New("invalid parser bundle manifest")
+	ErrSignatureRequired        = errors.New("bundle signature is required")
+	ErrSignatureUntrusted       = errors.New("bundle signature key is not trusted")
+	ErrSignatureInvalid         = errors.New("bundle signature verification failed")
 	ErrUnsafePath               = errors.New("unsafe bundle path")
 )
 
@@ -209,7 +212,7 @@ func validateManifest(manifest Manifest) error {
 		}
 	}
 	if manifest.Signature != nil {
-		if manifest.Signature.Algorithm != "cosign" && manifest.Signature.Algorithm != "minisign" {
+		if manifest.Signature.Algorithm != "ed25519" {
 			problems = append(problems, errors.New("signature algorithm is invalid"))
 		}
 		if strings.TrimSpace(manifest.Signature.KeyID) == "" || len(manifest.Signature.KeyID) > 256 {

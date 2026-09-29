@@ -317,6 +317,20 @@
           "minLength": 1,
           "maxLength": 1024
         },
+        "bundle_trust_roots": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key_id", "path"],
+            "properties": {
+              "key_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"},
+              "path": {"type": "string", "minLength": 1, "maxLength": 1024}
+            }
+          }
+        },
+        "require_bundle_signatures": {"type": "boolean"},
         "high_watermark_percent": {
           "type": "integer",
           "minimum": 50,

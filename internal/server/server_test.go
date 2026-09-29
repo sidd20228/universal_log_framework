@@ -308,6 +308,18 @@ func TestConnectorOperationsRequireAuthentication(t *testing.T) {
 	if authorized.Code != http.StatusOK || !strings.Contains(authorized.Body.String(), `"connectors":[]`) {
 		t.Fatalf("authorized status=%d body=%s", authorized.Code, authorized.Body.String())
 	}
+	metricsRequest := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsRequest.Header.Set("Authorization", "Bearer "+testToken)
+	metrics := httptest.NewRecorder()
+	service.Handler().ServeHTTP(metrics, metricsRequest)
+	for _, name := range []string{"ulpf_storage_used_ratio", "ulpf_receipts", "ulpf_queue_depth", "ulpf_queue_oldest_age_seconds", "ulpf_parser_results", "ulpf_dependency_healthy"} {
+		if !strings.Contains(metrics.Body.String(), name) {
+			t.Fatalf("metrics missing %s: status=%d body=%s", name, metrics.Code, metrics.Body.String())
+		}
+	}
+	if metrics.Code != http.StatusOK {
+		t.Fatalf("metrics status=%d body=%s", metrics.Code, metrics.Body.String())
+	}
 }
 
 func TestRunningServiceExposesConnectorDLQStatusAndReplay(t *testing.T) {

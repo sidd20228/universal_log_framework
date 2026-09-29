@@ -100,11 +100,18 @@ type ProcessingConfig struct {
 }
 
 type StorageConfig struct {
-	RawRoot              string `yaml:"raw_root" json:"raw_root"`
-	SQLitePath           string `yaml:"sqlite_path" json:"sqlite_path"`
-	BundleRoot           string `yaml:"bundle_root,omitempty" json:"bundle_root,omitempty"`
-	HighWatermarkPercent int    `yaml:"high_watermark_percent" json:"high_watermark_percent"`
-	Durability           string `yaml:"durability,omitempty" json:"durability,omitempty"`
+	RawRoot                 string                  `yaml:"raw_root" json:"raw_root"`
+	SQLitePath              string                  `yaml:"sqlite_path" json:"sqlite_path"`
+	BundleRoot              string                  `yaml:"bundle_root,omitempty" json:"bundle_root,omitempty"`
+	BundleTrustRoots        []BundleTrustRootConfig `yaml:"bundle_trust_roots,omitempty" json:"bundle_trust_roots,omitempty"`
+	RequireBundleSignatures bool                    `yaml:"require_bundle_signatures,omitempty" json:"require_bundle_signatures,omitempty"`
+	HighWatermarkPercent    int                     `yaml:"high_watermark_percent" json:"high_watermark_percent"`
+	Durability              string                  `yaml:"durability,omitempty" json:"durability,omitempty"`
+}
+
+type BundleTrustRootConfig struct {
+	KeyID string `yaml:"key_id" json:"key_id"`
+	Path  string `yaml:"path" json:"path"`
 }
 
 type RetentionConfig struct {
@@ -230,6 +237,22 @@ func (config Config) Validate() error {
 	}
 	if config.Storage.BundleRoot != "" && !filepath.IsAbs(config.Storage.BundleRoot) {
 		problems = append(problems, errors.New("storage.bundle_root must be an absolute path"))
+	}
+	if len(config.Storage.BundleTrustRoots) > 64 {
+		problems = append(problems, errors.New("storage.bundle_trust_roots cannot exceed 64 entries"))
+	}
+	trustIDs := make(map[string]struct{}, len(config.Storage.BundleTrustRoots))
+	for index, root := range config.Storage.BundleTrustRoots {
+		if !validIdentifier(root.KeyID) || !filepath.IsAbs(root.Path) {
+			problems = append(problems, fmt.Errorf("storage.bundle_trust_roots[%d] requires a valid key_id and absolute path", index))
+		}
+		if _, duplicate := trustIDs[root.KeyID]; duplicate {
+			problems = append(problems, fmt.Errorf("storage.bundle_trust_roots[%d]: duplicate key_id %q", index, root.KeyID))
+		}
+		trustIDs[root.KeyID] = struct{}{}
+	}
+	if config.Storage.RequireBundleSignatures && len(config.Storage.BundleTrustRoots) == 0 {
+		problems = append(problems, errors.New("storage.require_bundle_signatures requires bundle_trust_roots"))
 	}
 	if config.Storage.HighWatermarkPercent < 1 || config.Storage.HighWatermarkPercent > 99 {
 		problems = append(problems, errors.New("storage.high_watermark_percent must be between 1 and 99"))
@@ -496,6 +519,7 @@ func cloneConfig(config Config) Config {
 		}
 	}
 	clone.Connectors = append([]ConnectorConfig(nil), config.Connectors...)
+	clone.Storage.BundleTrustRoots = append([]BundleTrustRootConfig(nil), config.Storage.BundleTrustRoots...)
 	clone.Federation = append([]FederationPeerConfig(nil), config.Federation...)
 	return clone
 }

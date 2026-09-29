@@ -3,7 +3,9 @@ package registry
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,14 +24,18 @@ const (
 )
 
 type RuntimeCompatibility struct {
-	EngineVersion  string
-	EnvelopeSchema string
-	OCSFVersion    string
+	EngineVersion    string
+	EnvelopeSchema   string
+	OCSFVersion      string
+	TrustRoots       map[string]ed25519.PublicKey
+	RequireSignature bool
 }
 
 type Loader struct {
-	runtime       RuntimeCompatibility
-	engineVersion semanticVersion
+	runtime          RuntimeCompatibility
+	engineVersion    semanticVersion
+	trustRoots       map[string]ed25519.PublicKey
+	requireSignature bool
 }
 
 func NewLoader(runtime RuntimeCompatibility) (*Loader, error) {
@@ -40,7 +46,17 @@ func NewLoader(runtime RuntimeCompatibility) (*Loader, error) {
 	if strings.TrimSpace(runtime.EnvelopeSchema) == "" || strings.TrimSpace(runtime.OCSFVersion) == "" {
 		return nil, fmt.Errorf("runtime envelope schema and OCSF version are required")
 	}
-	return &Loader{runtime: runtime, engineVersion: engineVersion}, nil
+	trustRoots := make(map[string]ed25519.PublicKey, len(runtime.TrustRoots))
+	for keyID, publicKey := range runtime.TrustRoots {
+		if strings.TrimSpace(keyID) == "" || len(keyID) > 256 || len(publicKey) != ed25519.PublicKeySize {
+			return nil, errors.New("bundle trust root is invalid")
+		}
+		trustRoots[keyID] = append(ed25519.PublicKey(nil), publicKey...)
+	}
+	if runtime.RequireSignature && len(trustRoots) == 0 {
+		return nil, errors.New("required bundle signatures need at least one trust root")
+	}
+	return &Loader{runtime: runtime, engineVersion: engineVersion, trustRoots: trustRoots, requireSignature: runtime.RequireSignature}, nil
 }
 
 func (loader *Loader) LoadDirectory(ctx context.Context, directory string) (Descriptor, error) {
@@ -81,7 +97,6 @@ func (loader *Loader) LoadDirectory(ctx context.Context, directory string) (Desc
 	if err := validateBundlePaths(root, manifestName, manifest); err != nil {
 		return descriptor, err
 	}
-
 	bundleHash := sha256.New()
 	writeDigestHeader(bundleHash, manifestName, int64(len(manifestBytes)))
 	if _, err := bundleHash.Write(manifestBytes); err != nil {
@@ -135,13 +150,116 @@ func (loader *Loader) LoadDirectory(ctx context.Context, directory string) (Desc
 		totalBytes += written
 	}
 
+	digest := fmt.Sprintf("%x", bundleHash.Sum(nil))
+	if err := loader.verifySignature(ctx, root, manifest, digest); err != nil {
+		return descriptor, err
+	}
 	return Descriptor{
 		bundleID:  manifest.BundleID,
 		version:   manifest.Version,
-		digest:    fmt.Sprintf("%x", bundleHash.Sum(nil)),
+		digest:    digest,
 		directory: root,
 		manifest:  cloneManifest(manifest),
 	}, nil
+}
+
+func (loader *Loader) verifySignature(ctx context.Context, root string, manifest Manifest, digest string) error {
+	if manifest.Signature == nil {
+		if loader.requireSignature {
+			return ErrSignatureRequired
+		}
+		return nil
+	}
+	if len(loader.trustRoots) == 0 {
+		return fmt.Errorf("%w: %s", ErrSignatureUntrusted, manifest.Signature.KeyID)
+	}
+	publicKey, trusted := loader.trustRoots[manifest.Signature.KeyID]
+	if !trusted {
+		return fmt.Errorf("%w: %s", ErrSignatureUntrusted, manifest.Signature.KeyID)
+	}
+	payload := signingPayload(digest)
+	signaturePath, err := secureBundlePath(root, manifest.Signature.File, false)
+	if err != nil {
+		return err
+	}
+	encoded, err := readLimitedFile(ctx, signaturePath, 4096)
+	if err != nil {
+		return fmt.Errorf("read bundle signature: %w", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
+	if err != nil || len(decoded) != ed25519.SignatureSize || !ed25519.Verify(publicKey, payload, decoded) {
+		return ErrSignatureInvalid
+	}
+	return nil
+}
+
+// SigningPayload returns the domain-separated canonical bytes covered by a
+// detached Ed25519 bundle signature.
+func SigningPayload(ctx context.Context, directory string) ([]byte, error) {
+	root, err := validateBundleRoot(directory)
+	if err != nil {
+		return nil, err
+	}
+	manifestPath, _, err := locateManifest(root)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := readLimitedFile(ctx, manifestPath, maxManifestBytes)
+	if err != nil {
+		return nil, err
+	}
+	var manifest Manifest
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
+		return nil, err
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, err
+	}
+	if err := validateManifest(manifest); err != nil {
+		return nil, err
+	}
+	if err := validateBundlePaths(root, filepath.Base(manifestPath), manifest); err != nil {
+		return nil, err
+	}
+	digest, err := computeBundleDigest(ctx, root, filepath.Base(manifestPath), encoded, manifest)
+	if err != nil {
+		return nil, err
+	}
+	return signingPayload(digest), nil
+}
+
+func computeBundleDigest(ctx context.Context, root, manifestName string, manifestBytes []byte, manifest Manifest) (string, error) {
+	hash := sha256.New()
+	writeDigestHeader(hash, manifestName, int64(len(manifestBytes)))
+	_, _ = hash.Write(manifestBytes)
+	artifacts := append([]Artifact(nil), manifest.Artifacts...)
+	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].Path < artifacts[j].Path })
+	for _, artifact := range artifacts {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		path, err := secureBundlePath(root, artifact.Path, false)
+		if err != nil {
+			return "", err
+		}
+		contents, err := readLimitedFile(ctx, path, maxArtifactBytes)
+		if err != nil {
+			return "", err
+		}
+		actual := fmt.Sprintf("%x", sha256.Sum256(contents))
+		if actual != artifact.SHA256 {
+			return "", fmt.Errorf("%w: artifact %q", ErrArtifactIntegrity, artifact.Path)
+		}
+		writeDigestHeader(hash, artifact.Path, int64(len(contents)))
+		_, _ = hash.Write(contents)
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+func signingPayload(digest string) []byte {
+	return []byte("ulpf-parser-bundle-signature/v1\nsha256:" + digest + "\n")
 }
 
 func (loader *Loader) validateCompatibility(compatibility Compatibility) error {
@@ -228,8 +346,22 @@ func validateBundlePaths(root, manifestName string, manifest Manifest) error {
 	}
 	signaturePath := ""
 	if manifest.Signature != nil {
-		if _, err := secureBundlePath(root, manifest.Signature.File, false); err != nil {
+		if manifest.Signature.File == manifestName {
+			return fmt.Errorf("%w: signature file collides with manifest", ErrInvalidManifest)
+		}
+		if _, collision := artifactPaths[manifest.Signature.File]; collision {
+			return fmt.Errorf("%w: signature file collides with artifact", ErrInvalidManifest)
+		}
+		signatureFile, err := secureBundlePath(root, manifest.Signature.File, false)
+		if err != nil {
 			return err
+		}
+		info, err := os.Lstat(signatureFile)
+		if err != nil {
+			return err
+		}
+		if info.Mode().Perm()&0o111 != 0 || info.Size() < 1 || info.Size() > 4096 {
+			return fmt.Errorf("%w: signature file must be non-executable and at most 4096 bytes", ErrInvalidManifest)
 		}
 		signaturePath = manifest.Signature.File
 	}

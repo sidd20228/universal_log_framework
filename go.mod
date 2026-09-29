@@ -1,6 +1,8 @@
 module github.com/sidd20228/universal_log_framework
 
-go 1.24.0
+go 1.27.0
+
+toolchain go1.27.1
 
 require (
 	github.com/parquet-go/parquet-go v0.25.1

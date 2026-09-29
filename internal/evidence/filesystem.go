@@ -175,6 +175,33 @@ func (store *Filesystem) Verify(ctx context.Context, reference model.RawReferenc
 	return nil
 }
 
+// Delete removes evidence after the caller has applied retention and hold
+// policy. The immutable reference and expected hash are retained in SQLite.
+func (store *Filesystem) Delete(ctx context.Context, reference model.RawReference) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	resolved, err := store.resolveReference(reference.Ref)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if err := store.rejectSymlinks(resolved); err != nil {
+		return err
+	}
+	if err := os.Remove(resolved); err != nil {
+		if os.IsNotExist(err) {
+			return ErrUnavailable
+		}
+		return fmt.Errorf("delete expired evidence: %w", err)
+	}
+	if err := syncDirectory(filepath.Dir(resolved)); err != nil {
+		return fmt.Errorf("sync evidence directory after expiry: %w", err)
+	}
+	return nil
+}
+
 func (store *Filesystem) Reconcile(ctx context.Context, options ReconcileOptions) (ReconcileReport, error) {
 	var report ReconcileReport
 	if options.ReceiptExists == nil {

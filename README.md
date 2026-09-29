@@ -171,7 +171,8 @@ See the [architecture two-pager](docs/ARCHITECTURE_TWO_PAGER.md), the
   tenant-scoped event queries; the default Compose file exercises this path.
 - Static bearer tokens are appropriate for loopback or protected private
   networks. TLS termination, mTLS/OIDC, centralized policy, replicated
-  storage, automated retention, and automated backups remain deployment work.
+  storage, organization-specific retention/hold policy, offsite backup
+  schedules, and centralized disaster recovery remain deployment work.
 - Bundle validate, install, list, activation history, and CAS activation are
   exposed through the CLI. The authenticated control API performs precompiled
   live activation or rollback and durable reprocessing against retained

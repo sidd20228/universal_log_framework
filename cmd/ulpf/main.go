@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -16,11 +18,14 @@ import (
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/analytics"
+	"github.com/sidd20228/universal_log_framework/internal/backup"
 	"github.com/sidd20228/universal_log_framework/internal/bundlecompile"
 	"github.com/sidd20228/universal_log_framework/internal/control"
 	"github.com/sidd20228/universal_log_framework/internal/dashboardapi"
 	"github.com/sidd20228/universal_log_framework/internal/envelope"
+	"github.com/sidd20228/universal_log_framework/internal/evidence"
 	"github.com/sidd20228/universal_log_framework/internal/inbox"
+	"github.com/sidd20228/universal_log_framework/internal/maintenance"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 	"github.com/sidd20228/universal_log_framework/internal/registry"
 	"github.com/sidd20228/universal_log_framework/internal/server"
@@ -60,6 +65,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runBundle(args[1:], stdout, stderr)
 	case "dataset":
 		return runDataset(args[1:], stdout, stderr)
+	case "backup":
+		return runBackup(args[1:], stdout, stderr)
+	case "maintenance":
+		return runMaintenanceCommand(args[1:], stdout, stderr)
+	case "retention":
+		return runRetention(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		printUsage(stdout)
 		return 0
@@ -68,6 +79,202 @@ func run(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runBackup(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "backup requires create, verify, restore, or drill")
+		return 2
+	}
+	flags := flag.NewFlagSet("backup "+args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	backupPath := flags.String("backup", "", "backup set directory")
+	sqlitePath := flags.String("sqlite", "", "SQLite state path")
+	rawRoot := flags.String("raw-root", "", "raw evidence root")
+	reportPath := flags.String("report", "", "immutable recovery drill report path")
+	actor := flags.String("actor", "ulpf-operator", "audited operator identity")
+	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
+		return 2
+	}
+	ctx := context.Background()
+	var value any
+	var err error
+	switch args[0] {
+	case "create":
+		if *backupPath == "" || *sqlitePath == "" || *rawRoot == "" {
+			fmt.Fprintln(stderr, "backup create requires --backup, --sqlite, and --raw-root")
+			return 2
+		}
+		value, err = backup.Create(ctx, *sqlitePath, *rawRoot, *backupPath, time.Now().UTC())
+	case "verify":
+		if *backupPath == "" {
+			fmt.Fprintln(stderr, "backup verify requires --backup")
+			return 2
+		}
+		value, err = backup.Verify(ctx, *backupPath)
+	case "restore":
+		if *backupPath == "" || *sqlitePath == "" || *rawRoot == "" {
+			fmt.Fprintln(stderr, "backup restore requires --backup, --sqlite, and --raw-root")
+			return 2
+		}
+		value, err = backup.Restore(ctx, *backupPath, *sqlitePath, *rawRoot)
+	case "drill":
+		if *backupPath == "" || *reportPath == "" {
+			fmt.Fprintln(stderr, "backup drill requires --backup and --report")
+			return 2
+		}
+		var report backup.DrillReport
+		report, err = backup.Drill(ctx, *backupPath, *actor, time.Now().UTC())
+		writeErr := backup.WriteDrillReport(*reportPath, report)
+		if err == nil {
+			err = writeErr
+		}
+		value = report
+	default:
+		fmt.Fprintf(stderr, "unknown backup command %q\n", args[0])
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "backup %s failed: %v\n", args[0], err)
+		return 1
+	}
+	_ = json.NewEncoder(stdout).Encode(value)
+	return 0
+}
+
+func runMaintenanceCommand(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "reconcile" {
+		fmt.Fprintln(stderr, "maintenance requires reconcile")
+		return 2
+	}
+	flags := flag.NewFlagSet("maintenance reconcile", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	sqlitePath := flags.String("sqlite", "", "SQLite state path")
+	rawRoot := flags.String("raw-root", "", "raw evidence root")
+	actor := flags.String("actor", "ulpf-operator", "audited operator identity")
+	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *sqlitePath == "" || *rawRoot == "" {
+		fmt.Fprintln(stderr, "maintenance reconcile requires --sqlite and --raw-root")
+		return 2
+	}
+	store, raw, manager, err := openMaintenance(*sqlitePath, *rawRoot)
+	if err != nil {
+		fmt.Fprintf(stderr, "open maintenance state: %v\n", err)
+		return 1
+	}
+	defer store.Close()
+	_ = raw
+	report, err := manager.Reconcile(context.Background(), *actor, time.Now().UTC())
+	if err != nil {
+		fmt.Fprintf(stderr, "reconciliation failed: %v\n", err)
+		return 1
+	}
+	_ = json.NewEncoder(stdout).Encode(report)
+	return 0
+}
+
+func runRetention(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "retention requires run, hold-create, hold-release, or hold-list")
+		return 2
+	}
+	flags := flag.NewFlagSet("retention "+args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	sqlitePath := flags.String("sqlite", "", "SQLite state path")
+	rawRoot := flags.String("raw-root", "", "raw evidence root")
+	tenant := flags.String("tenant", "", "tenant identifier")
+	actor := flags.String("actor", "ulpf-operator", "audited operator identity")
+	receiptID := flags.String("receipt", "", "optional receipt-scoped hold")
+	holdID := flags.String("hold-id", "", "forensic hold identifier")
+	reason := flags.String("reason", "", "forensic hold reason")
+	expires := flags.Duration("expires-in", 0, "optional hold duration")
+	rawDays := flags.Int("raw-days", 0, "raw retention period in days")
+	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *sqlitePath == "" || *tenant == "" {
+		fmt.Fprintln(stderr, "retention command requires --sqlite and --tenant")
+		return 2
+	}
+	ctx := context.Background()
+	store, err := inbox.OpenSQLite(ctx, *sqlitePath)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	defer store.Close()
+	switch args[0] {
+	case "hold-create":
+		if *reason == "" {
+			fmt.Fprintln(stderr, "hold-create requires --reason")
+			return 2
+		}
+		if *holdID == "" {
+			*holdID = fmt.Sprintf("hold-%d", time.Now().UTC().UnixNano())
+		}
+		hold := inbox.ForensicHold{ID: *holdID, TenantID: *tenant, ReceiptID: *receiptID, Reason: *reason, Actor: *actor, CreatedAt: time.Now().UTC()}
+		if *expires > 0 {
+			expiry := hold.CreatedAt.Add(*expires)
+			hold.ExpiresAt = &expiry
+		}
+		if err := store.CreateForensicHold(ctx, hold); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		_ = json.NewEncoder(stdout).Encode(hold)
+	case "hold-release":
+		if *holdID == "" {
+			fmt.Fprintln(stderr, "hold-release requires --hold-id")
+			return 2
+		}
+		if err := store.ReleaseForensicHold(ctx, *tenant, *holdID, *actor, time.Now().UTC()); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		_ = json.NewEncoder(stdout).Encode(map[string]string{"hold_id": *holdID, "status": "released"})
+	case "hold-list":
+		values, err := store.ListForensicHolds(ctx, *tenant)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		_ = json.NewEncoder(stdout).Encode(values)
+	case "run":
+		if *rawRoot == "" || *rawDays < 1 {
+			fmt.Fprintln(stderr, "retention run requires --raw-root and positive --raw-days")
+			return 2
+		}
+		raw, err := evidence.NewFilesystem(*rawRoot)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		manager, _ := maintenance.New(store, raw)
+		report, err := manager.RunRetention(ctx, *tenant, *actor, *rawDays, time.Now().UTC())
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		_ = json.NewEncoder(stdout).Encode(report)
+	default:
+		fmt.Fprintf(stderr, "unknown retention command %q\n", args[0])
+		return 2
+	}
+	return 0
+}
+
+func openMaintenance(sqlitePath, rawRoot string) (*inbox.SQLiteStore, *evidence.Filesystem, *maintenance.Manager, error) {
+	store, err := inbox.OpenSQLite(context.Background(), sqlitePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	raw, err := evidence.NewFilesystem(rawRoot)
+	if err != nil {
+		store.Close()
+		return nil, nil, nil, err
+	}
+	manager, err := maintenance.New(store, raw)
+	if err != nil {
+		store.Close()
+		return nil, nil, nil, err
+	}
+	return store, raw, manager, nil
 }
 
 func runDataset(args []string, stdout, stderr io.Writer) int {
@@ -152,20 +359,95 @@ func runtimeBundleLoader() (*registry.Loader, error) {
 	return registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: envelope.SchemaVersion, OCSFVersion: "1.9.0"})
 }
 
+type repeatedFlag []string
+
+func (values *repeatedFlag) String() string         { return strings.Join(*values, ",") }
+func (values *repeatedFlag) Set(value string) error { *values = append(*values, value); return nil }
+
+func trustedBundleLoader(specifications []string, require bool) (*registry.Loader, error) {
+	trustRoots, err := loadBundleTrustRoots(specifications)
+	if err != nil {
+		return nil, err
+	}
+	return registry.NewLoader(registry.RuntimeCompatibility{EngineVersion: "1.0.0", EnvelopeSchema: envelope.SchemaVersion, OCSFVersion: "1.9.0", TrustRoots: trustRoots, RequireSignature: require})
+}
+
+func loadBundleTrustRoots(specifications []string) (map[string]ed25519.PublicKey, error) {
+	trustRoots := make(map[string]ed25519.PublicKey, len(specifications))
+	for _, specification := range specifications {
+		keyID, path, found := strings.Cut(specification, "=")
+		if !found || strings.TrimSpace(keyID) == "" || strings.TrimSpace(path) == "" {
+			return nil, errors.New("trust root must be key-id=public-key-file")
+		}
+		if _, duplicate := trustRoots[keyID]; duplicate {
+			return nil, errors.New("duplicate bundle trust root")
+		}
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > 4096 {
+			return nil, fmt.Errorf("bundle trust root %q must be a bounded regular file", keyID)
+		}
+		encoded, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read bundle trust root %q: %w", keyID, err)
+		}
+		if len(encoded) > 4096 {
+			return nil, errors.New("bundle trust root exceeds 4096 bytes")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(encoded)))
+		if err != nil || len(decoded) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("bundle trust root %q is not a base64 Ed25519 public key", keyID)
+		}
+		trustRoots[keyID] = ed25519.PublicKey(decoded)
+	}
+	return trustRoots, nil
+}
+
 func runBundle(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "bundle requires validate, install, list, activations, or activate")
+		fmt.Fprintln(stderr, "bundle requires scaffold, validate, test, install, list, activations, activate, or rollback")
 		return 2
 	}
-	if args[0] == "validate" {
-		flags := flag.NewFlagSet("bundle validate", flag.ContinueOnError)
+	if args[0] == "scaffold" {
+		flags := flag.NewFlagSet("bundle scaffold", flag.ContinueOnError)
 		flags.SetOutput(stderr)
-		asJSON := flags.Bool("json", false, "emit machine-readable JSON")
-		if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 1 {
-			fmt.Fprintln(stderr, "bundle validate requires one directory")
+		bundleID := flags.String("id", "", "bundle identifier")
+		bundleVersion := flags.String("version", "1.0.0", "bundle semantic version")
+		format := flags.String("format", "json", "json or kv")
+		if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 1 || *bundleID == "" {
+			fmt.Fprintln(stderr, "bundle scaffold requires --id and one output directory")
 			return 2
 		}
+		if err := registry.Scaffold(registry.ScaffoldOptions{Directory: flags.Arg(0), BundleID: *bundleID, Version: *bundleVersion, Format: *format}); err != nil {
+			fmt.Fprintf(stderr, "bundle scaffold failed: %v\n", err)
+			return 1
+		}
 		loader, err := runtimeBundleLoader()
+		if err == nil {
+			descriptor, loadErr := loader.LoadDirectory(context.Background(), flags.Arg(0))
+			if loadErr == nil {
+				_, loadErr = bundlecompile.Compile(context.Background(), descriptor)
+			}
+			err = loadErr
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "generated bundle invalid: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "bundle scaffold ready: %s@%s %s\n", *bundleID, *bundleVersion, flags.Arg(0))
+		return 0
+	}
+	if args[0] == "validate" || args[0] == "test" {
+		flags := flag.NewFlagSet("bundle "+args[0], flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		asJSON := flags.Bool("json", false, "emit machine-readable JSON")
+		requireSignature := flags.Bool("require-signature", false, "reject unsigned bundles")
+		var trustRoots repeatedFlag
+		flags.Var(&trustRoots, "trust-root", "trusted signer as key-id=base64-public-key-file (repeatable)")
+		if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 1 {
+			fmt.Fprintf(stderr, "bundle %s requires one directory\n", args[0])
+			return 2
+		}
+		loader, err := trustedBundleLoader(trustRoots, *requireSignature)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -178,11 +460,15 @@ func runBundle(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "bundle invalid: %v\n", err)
 			return 1
 		}
-		value := map[string]string{"bundle_id": descriptor.BundleID(), "version": descriptor.Version(), "sha256": descriptor.Digest(), "status": "valid"}
+		status := "valid"
+		if args[0] == "test" {
+			status = "tested"
+		}
+		value := map[string]string{"bundle_id": descriptor.BundleID(), "version": descriptor.Version(), "sha256": descriptor.Digest(), "status": status}
 		if *asJSON {
 			_ = json.NewEncoder(stdout).Encode(value)
 		} else {
-			fmt.Fprintf(stdout, "bundle valid: %s@%s sha256=%s\n", descriptor.BundleID(), descriptor.Version(), descriptor.Digest())
+			fmt.Fprintf(stdout, "bundle %s: %s@%s sha256=%s\n", status, descriptor.BundleID(), descriptor.Version(), descriptor.Digest())
 		}
 		return 0
 	}
@@ -194,6 +480,9 @@ func runBundle(args []string, stdout, stderr io.Writer) int {
 	digest := flags.String("sha256", "", "installed bundle digest")
 	expected := flags.Uint64("expected-revision", 0, "expected activation revision")
 	actor := flags.String("actor", "ulpf-cli", "audited operator identity")
+	requireSignature := flags.Bool("require-signature", false, "reject unsigned bundles")
+	var trustRoots repeatedFlag
+	flags.Var(&trustRoots, "trust-root", "trusted signer as key-id=base64-public-key-file (repeatable)")
 	if err := flags.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -207,7 +496,7 @@ func runBundle(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer store.Close()
-	loader, err := runtimeBundleLoader()
+	loader, err := trustedBundleLoader(trustRoots, *requireSignature)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -251,9 +540,9 @@ func runBundle(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		_ = json.NewEncoder(stdout).Encode(lifecycle.ActivationSnapshot().List())
-	case "activate":
+	case "activate", "rollback":
 		if flags.NArg() != 0 || *profile == "" || *digest == "" {
-			fmt.Fprintln(stderr, "bundle activate requires --source-profile and --sha256")
+			fmt.Fprintf(stderr, "bundle %s requires --source-profile and --sha256\n", args[0])
 			return 2
 		}
 		descriptor, err := lifecycle.DescriptorByDigest(context.Background(), *digest)
@@ -266,7 +555,7 @@ func runBundle(args []string, stdout, stderr io.Writer) int {
 		}
 		activation, err := lifecycle.Activate(context.Background(), *profile, *digest, *expected, *actor)
 		if err != nil {
-			fmt.Fprintf(stderr, "bundle activate failed: %v\n", err)
+			fmt.Fprintf(stderr, "bundle %s failed: %v\n", args[0], err)
 			return 1
 		}
 		_ = json.NewEncoder(stdout).Encode(activation)
@@ -385,14 +674,24 @@ func loadRuntimeConfig(path string) (server.Config, error) {
 		}
 		connectors = append(connectors, runtimeConnector)
 	}
+	trustSpecifications := make([]string, 0, len(config.Storage.BundleTrustRoots))
+	for _, root := range config.Storage.BundleTrustRoots {
+		trustSpecifications = append(trustSpecifications, root.KeyID+"="+root.Path)
+	}
+	trustRoots, err := loadBundleTrustRoots(trustSpecifications)
+	if err != nil {
+		return server.Config{}, fmt.Errorf("load bundle trust roots: %w", err)
+	}
 	return server.Config{
 		Address: listener.Address, SQLitePath: config.Storage.SQLitePath, RawRoot: config.Storage.RawRoot,
 		TenantID: config.Deployment.TenantID, EnvironmentID: config.Deployment.EnvironmentID, InstanceID: config.Deployment.InstanceID,
 		ListenerID: listener.ID, SourceProfileID: listener.SourceProfileID, SourceProfileByCIDR: listener.SourceProfileByCIDR,
 		FederationPeers: peers,
-		BundleRoot:      config.Storage.BundleRoot, SourceBundles: sourceBundles, Connectors: connectors,
+		BundleRoot:      config.Storage.BundleRoot, BundleTrustRoots: trustRoots, RequireBundleSignatures: config.Storage.RequireBundleSignatures,
+		SourceBundles: sourceBundles, Connectors: connectors,
 		Token: token, Workers: config.Processing.Workers, MaxEventBytes: listener.MaxEventBytes,
-		ProcessingTimeout: config.Processing.ParserTimeout.Duration(),
+		ProcessingTimeout: config.Processing.ParserTimeout.Duration(), HighWatermarkPercent: config.Storage.HighWatermarkPercent,
+		RawRetentionDays: config.Retention.RawDays,
 	}, nil
 }
 
@@ -507,5 +806,5 @@ func runValidateConfig(args []string, stdout, stderr io.Writer) int {
 
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: ulpf <command> [options]")
-	fmt.Fprintln(writer, "commands: version, validate-config, serve, healthcheck, bundle, dataset")
+	fmt.Fprintln(writer, "commands: version, validate-config, serve, healthcheck, bundle, dataset, backup, maintenance, retention")
 }

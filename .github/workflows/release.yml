@@ -132,6 +132,12 @@ jobs:
           CLICKHOUSE_PASSWORD: release-test-clickhouse-000000000000000001
           ULPF_OFFLINE_EVIDENCE_PATH: dist/offline-clean-install-${{ matrix.arch }}.json
         run: ./scripts/test-offline-install.sh "dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst" release-inputs/signing-public.pem
+      - name: Upload compact qualification proof
+        uses: actions/upload-artifact@v7
+        with:
+          name: offline-proof-${{ steps.release.outputs.version }}-${{ matrix.arch }}
+          path: dist/offline-clean-install-${{ matrix.arch }}.json
+          if-no-files-found: error
       - name: Attest offline release provenance
         uses: actions/attest-build-provenance@v4
         with:

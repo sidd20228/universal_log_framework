@@ -76,10 +76,10 @@ run_check() {
   shift
   temporary=$(mktemp)
   if "$@" >"$temporary" 2>&1; then
-    cat "$temporary" >>"$report"
+    sed 's/[[:space:]]*$//' "$temporary" >>"$report"
     pass "$label"
   else
-    cat "$temporary" >>"$report"
+    sed 's/[[:space:]]*$//' "$temporary" >>"$report"
     fail "$label"
   fi
   rm -f "$temporary"
@@ -88,7 +88,7 @@ run_check() {
 log "ULPF evaluation verification"
 log "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 log "git_commit=$(git rev-parse HEAD 2>/dev/null || printf unknown)"
-if test -n "$(git status --porcelain 2>/dev/null)"; then
+if test -n "$(git status --porcelain -- . ':(exclude)output/evaluation/verification.txt' 2>/dev/null)"; then
   log 'git_dirty=true'
 else
   log 'git_dirty=false'
@@ -142,6 +142,7 @@ require_files 'T39 editable five-slide presentation' docs/TECHNICAL_PRESENTATION
 require_files 'T40 trace document, expected outcomes, and verifier' docs/EVALUATION_TRACE.md docs/EXPECTED_OUTCOMES.md scripts/verify-evaluation.sh
 require_files 'T41 dynamic dashboard frontend, API, guide, and design reference' docs/DASHBOARD.md docs/assets/dashboard-concept.png internal/dashboard/handler.go internal/dashboard/assets/index.html internal/dashboard/assets/styles.css internal/dashboard/assets/app.js internal/dashboardapi/summary.go internal/dashboardapi/http.go
 require_files 'T42-T53 completed runtime slices and handbook' docs/PROJECT_HANDBOOK.md internal/bundlecompile/compiler.go internal/reprocess/executor.go internal/deliver/parquet/connector.go internal/analytics/export.go internal/dashboardapi/federated.go scripts/test-offline-install.sh .github/workflows/release.yml
+require_files 'Bundle trust and operational recovery completion' internal/registry/scaffold.go internal/backup/backup.go internal/capacity/disk.go internal/maintenance/maintenance.go internal/server/metrics.go deployments/monitoring/ulpf-alerts.yaml migrations/sqlite/0008_maintenance.sql
 require_files 'Native arm64 offline clean-install evidence' output/evaluation/offline-clean-install-arm64.txt output/evaluation/offline-clean-install-arm64.json
 
 if command -v pdfinfo >/dev/null 2>&1; then
@@ -212,7 +213,7 @@ else
 fi
 
 limit 'The arm64 clean-install proof is complete; native amd64 clean-install evidence requires the release runner'
-limit 'No production-scale, sustained, replicated, retention, disk-watermark, or backup/restore result is claimed'
+limit 'No production-scale, sustained, replicated, multi-node disaster-recovery, or organization-specific retention result is claimed'
 
 log "SUMMARY passes=$passes failures=$failures pending=$pending limits=$limits"
 log "report=$report"

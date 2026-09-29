@@ -1,0 +1,90 @@
+groups:
+  - name: ulpf-single-node
+    rules:
+      - alert: ULPFDiskAdmissionBlocked
+        expr: ulpf_storage_admission_blocked == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: ULPF admission is blocked by its disk watermark
+          description: Free capacity must be restored before durable admission can resume. Do not remove evidence outside the retention command.
+          runbook: docs/OPERATIONS.md#capacity-alerts
+
+      - alert: ULPFDiskApproachingWatermark
+        expr: ulpf_storage_used_ratio > 0.80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: ULPF raw storage is above 80 percent
+          description: Review ingest rate, active forensic holds, backup status, and the configured retention window.
+          runbook: docs/OPERATIONS.md#capacity-alerts
+
+      - alert: ULPFRawEvidenceIntegrityFailure
+        expr: increase(ulpf_reconciliation_findings_total{kind=~"missing|corrupt"}[10m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: ULPF found missing or corrupt raw evidence
+          description: Stop retention and processing for affected storage, preserve the volume, verify the latest backup, and run a recovery drill.
+          runbook: docs/OPERATIONS.md#raw-evidence-reconciliation
+
+      - alert: ULPFReconciliationStale
+        expr: time() - ulpf_maintenance_last_success_timestamp_seconds{job="reconcile"} > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: ULPF raw evidence reconciliation is stale
+          description: Check runtime logs and SQLite/raw-volume access, then run the operator maintenance command while the service is stopped.
+          runbook: docs/OPERATIONS.md#raw-evidence-reconciliation
+
+      - alert: ULPFRequiredConnectorDeadLetter
+        expr: ulpf_connector_deliveries{required="true",state="DEAD_LETTER"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: A required ULPF connector has dead-letter deliveries
+          description: Inspect the tenant-scoped connector DLQ, correct the destination, and explicitly replay affected revisions.
+          runbook: docs/CONNECTORS.md#durable-retry-dlq-and-replay
+
+      - alert: ULPFProcessingBacklog
+        expr: ulpf_receipts{state=~"ACCEPTED|PROCESSING|DELIVERY_PENDING"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ULPF durable processing backlog is elevated
+          description: Check worker health, required connector status, parse timeouts, and disk latency before increasing concurrency.
+          runbook: docs/OPERATIONS.md#capacity-alerts
+
+      - alert: ULPFOldestQueueItemStale
+        expr: ulpf_queue_oldest_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The oldest active ULPF receipt has waited over five minutes
+          description: Inspect parser results, required dependency health, worker progress, and connector delivery state.
+          runbook: docs/OPERATIONS.md#capacity-alerts
+
+      - alert: ULPFRequiredDependencyUnavailable
+        expr: ulpf_dependency_healthy{required="true"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: A required ULPF dependency is unhealthy
+          description: Inspect the dependency label and restore raw storage or the required connector before admission resumes.
+          runbook: docs/OPERATIONS.md#capacity-alerts
+
+      - alert: ULPFCapacityRejections
+        expr: increase(ulpf_admission_requests_total{outcome="rejected_capacity"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: ULPF rejected admission because durable storage was unavailable
+          description: Confirm the disk watermark and filesystem health. UDP senders cannot observe this rejection and require upstream loss monitoring.
+          runbook: docs/OPERATIONS.md#capacity-alerts

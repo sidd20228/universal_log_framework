@@ -25,8 +25,13 @@ builtin_syslog  builtin_json  builtin_xml  builtin_csv
 builtin_cef     builtin_leef  builtin_kv   declarative_re2
 ```
 
-The `ulpf serve` command currently uses a fixed built-in registry. Bundle
-installation and activation are Go lifecycle APIs, not CLI operations.
+The runtime combines built-in fallback parsers with atomically activated
+declarative bundles. Start a reviewed JSON or key/value bundle with:
+
+```sh
+ulpf bundle scaffold --id lab-router --format json ./lab-router
+ulpf bundle test --json ./lab-router
+```
 
 ## Syntax parser contract
 
@@ -230,6 +235,16 @@ in `internal/interpret/mapping`.
 9. Reprocess retained receipts explicitly when comparing a new version; never
    overwrite an earlier revision or raw evidence.
 
+The equivalent CLI flow is:
+
+```sh
+ulpf bundle install --sqlite state.sqlite --catalog bundles ./lab-router
+ulpf bundle activate --sqlite state.sqlite --catalog bundles \
+  --source-profile lab-router-a --sha256 DIGEST --expected-revision 0
+ulpf bundle rollback --sqlite state.sqlite --catalog bundles \
+  --source-profile lab-router-a --sha256 PRIOR_DIGEST --expected-revision 1
+```
+
 Run the package gates before review:
 
 ```sh
@@ -238,7 +253,53 @@ go vet ./internal/registry ./internal/interpret/... ./internal/envelope
 ./scripts/verify-corpus.sh
 ```
 
-Manifest checksums establish bundle integrity inside the catalog. The
-optional signature metadata accepts `cosign` or `minisign` declarations, but
-the current loader does not verify cryptographic signatures. Apply an external
-reviewed signature policy before treating a bundle as publisher-authenticated.
+## Publisher signatures and offline trust roots
+
+Artifact hashes establish content integrity. Publisher authentication uses a
+detached Ed25519 signature and local trust roots, with no network or
+transparency-log dependency. Add this metadata before signing:
+
+```json
+"signature": {
+  "algorithm": "ed25519",
+  "key_id": "security-parsers-2026",
+  "file": "bundle.sig"
+}
+```
+
+`registry.SigningPayload` returns the exact domain-separated bytes to sign. It
+binds the bundle SHA-256 identity, which covers the raw manifest filename and
+bytes plus every declared artifact path, size, and byte sequence. Store the
+64-byte Ed25519 signature as standard base64 in `bundle.sig`; the signature
+file is not an artifact and cannot collide with the manifest or an artifact.
+Store public keys as standard base64 encoding of the 32 raw Ed25519 bytes.
+
+Validate and install under a fail-closed policy with repeatable trust roots:
+
+```sh
+ulpf bundle test --require-signature \
+  --trust-root security-parsers-2026=/etc/ulpf/trust/security-parsers-2026.pub \
+  ./lab-router
+ulpf bundle install --sqlite state.sqlite --catalog bundles \
+  --require-signature \
+  --trust-root security-parsers-2026=/etc/ulpf/trust/security-parsers-2026.pub \
+  ./lab-router
+```
+
+A declared signature always requires a configured matching trust root.
+`--require-signature` additionally rejects unsigned bundles. Trust roots are
+copied into immutable loader state, signatures and keys have strict size
+bounds, and all verification works in an air-gapped network. Rotation uses a
+new key ID and republished bundle version; removing a trust root causes signed
+catalog entries using it to fail verification on lifecycle restart.
+
+The service applies the same policy from its authoritative configuration:
+
+```yaml
+storage:
+  bundle_root: /var/lib/ulpf/bundles
+  bundle_trust_roots:
+    - key_id: security-parsers-2026
+      path: /etc/ulpf/trust/security-parsers-2026.pub
+  require_bundle_signatures: true
+```

@@ -73,6 +73,34 @@ func TestParseRejectsUnknownAndSemanticallyInvalidFields(t *testing.T) {
 	}
 }
 
+func TestBundleTrustPolicyValidationAndDefensiveCopy(t *testing.T) {
+	withTrust := strings.Replace(validConfigYAML, "  high_watermark_percent: 85", `  bundle_trust_roots:
+    - key_id: publisher-a
+      path: /etc/ulpf/trust/publisher-a.pub
+  require_bundle_signatures: true
+  high_watermark_percent: 85`, 1)
+	snapshot, err := Parse([]byte(withTrust), "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := snapshot.Config()
+	config.Storage.BundleTrustRoots[0].KeyID = "changed"
+	if snapshot.Config().Storage.BundleTrustRoots[0].KeyID != "publisher-a" {
+		t.Fatal("trust roots were not defensively copied")
+	}
+	for name, body := range map[string]string{
+		"required without roots": strings.Replace(validConfigYAML, "  high_watermark_percent: 85", "  require_bundle_signatures: true\n  high_watermark_percent: 85", 1),
+		"relative root":          strings.Replace(withTrust, "/etc/ulpf/trust/publisher-a.pub", "trust/publisher-a.pub", 1),
+		"duplicate key":          strings.Replace(withTrust, "  require_bundle_signatures: true", "    - key_id: publisher-a\n      path: /etc/ulpf/trust/other.pub\n  require_bundle_signatures: true", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Parse([]byte(body), "test"); err == nil {
+				t.Fatal("accepted invalid trust policy")
+			}
+		})
+	}
+}
+
 func TestManagerDoesNotActivateInvalidConfiguration(t *testing.T) {
 	initial, err := Parse([]byte(validConfigYAML), "initial")
 	if err != nil {

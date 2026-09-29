@@ -16,6 +16,7 @@ var (
 	ErrInvalidRequest  = errors.New("invalid admission request")
 	ErrEvidenceWrite   = errors.New("evidence write failed")
 	ErrInboxWrite      = errors.New("inbox write failed after evidence commit")
+	ErrCapacity        = errors.New("admission capacity unavailable")
 )
 
 type Admission interface {
@@ -85,12 +86,25 @@ type Coordinator struct {
 	maxEventBytes int64
 	ids           idGenerator
 	now           func() time.Time
+	capacity      interface{ Check(context.Context) error }
 }
 
 var _ Admission = (*Coordinator)(nil)
 
 func NewCoordinator(evidence evidenceWriter, inbox inboxWriter, maxEventBytes int64) (*Coordinator, error) {
 	return newCoordinator(evidence, inbox, maxEventBytes, newUUIDv7Generator(), time.Now)
+}
+
+func NewCoordinatorWithCapacity(evidence evidenceWriter, inbox inboxWriter, maxEventBytes int64, capacity interface{ Check(context.Context) error }) (*Coordinator, error) {
+	coordinator, err := newCoordinator(evidence, inbox, maxEventBytes, newUUIDv7Generator(), time.Now)
+	if err != nil {
+		return nil, err
+	}
+	if capacity == nil {
+		return nil, errors.New("capacity guard is required")
+	}
+	coordinator.capacity = capacity
+	return coordinator, nil
 }
 
 func newCoordinator(evidence evidenceWriter, inbox inboxWriter, maxEventBytes int64, ids idGenerator, now func() time.Time) (*Coordinator, error) {
@@ -121,6 +135,11 @@ func (coordinator *Coordinator) Admit(ctx context.Context, request AdmissionRequ
 	}
 	if request.Payload == nil || strings.TrimSpace(request.TenantID) == "" || strings.TrimSpace(request.ListenerID) == "" {
 		return AdmissionResult{}, ErrInvalidRequest
+	}
+	if coordinator.capacity != nil {
+		if err := coordinator.capacity.Check(ctx); err != nil {
+			return AdmissionResult{}, &AdmissionError{Kind: ErrCapacity, Cause: err}
+		}
 	}
 	transport, framingMode, err := admissionTransport(request.Transport, request.FramingMode)
 	if err != nil {

@@ -19,8 +19,11 @@ require_file "$dockerignore"
 from_count=$(awk 'toupper($1) == "FROM" { count++ } END { print count + 0 }' "$dockerfile")
 test "$from_count" -eq 2 || fail "Dockerfile must contain exactly two build stages"
 
-module_go_version=$(awk '$1 == "go" { print $2; exit }' go.mod)
-grep -Fq "FROM docker.io/library/golang:${module_go_version}-" "$dockerfile" || fail "builder Go version must match go.mod"
+builder_go_version=$(awk '$1 == "toolchain" { sub(/^go/, "", $2); print $2; exit }' go.mod)
+if test -z "$builder_go_version"; then
+  builder_go_version=$(awk '$1 == "go" { print $2; exit }' go.mod)
+fi
+grep -Fq "FROM docker.io/library/golang:${builder_go_version}-" "$dockerfile" || fail "builder Go version must match the go.mod toolchain"
 
 awk '
   toupper($1) == "FROM" {

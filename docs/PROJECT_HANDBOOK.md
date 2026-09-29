@@ -133,6 +133,8 @@ Useful commands:
 
 ```bash
 ulpf bundle validate --json ./bundles/reference/json-firewall
+ulpf bundle scaffold --id my-firewall --format json ./my-firewall
+ulpf bundle test --json ./my-firewall
 ulpf bundle install --sqlite /var/lib/ulpf/state/ulpf.sqlite \
   --catalog /var/lib/ulpf/bundles ./my-bundle
 ulpf bundle list --sqlite /var/lib/ulpf/state/ulpf.sqlite \
@@ -140,6 +142,9 @@ ulpf bundle list --sqlite /var/lib/ulpf/state/ulpf.sqlite \
 ulpf bundle activate --sqlite /var/lib/ulpf/state/ulpf.sqlite \
   --catalog /var/lib/ulpf/bundles --source-profile firewall-a \
   --sha256 DIGEST --expected-revision 0 --actor operator@example
+ulpf bundle rollback --sqlite /var/lib/ulpf/state/ulpf.sqlite \
+  --catalog /var/lib/ulpf/bundles --source-profile firewall-a \
+  --sha256 PRIOR_DIGEST --expected-revision 1 --actor operator@example
 ```
 
 Configured bundle directories are installed, semantically compiled, activated,
@@ -317,8 +322,10 @@ archive attacks, and end-to-end fault injection.
 The detailed a–k assessment is in
 [`docs/EXPECTED_OUTCOMES.md`](EXPECTED_OUTCOMES.md). Local code now implements
 raw preservation, supported parsing, configured taxonomy mapping and lineage,
-declarative onboarding, bounded federation, SIEM/ClickHouse/NDJSON/Parquet
-delivery, analytics contracts, and container/offline packaging. Release trust,
-native multi-architecture clean-install evidence, enterprise HA/RPO/RTO, and
-organization-specific capacity qualification require external infrastructure
-and must not be inferred from unit tests on one laptop.
+signed declarative onboarding, bounded federation,
+SIEM/ClickHouse/NDJSON/Parquet delivery, analytics contracts, disk-aware
+admission, retention with holds, verified local backup/restore, and signed
+container/offline packaging. Native multi-architecture clean-install evidence,
+enterprise HA and offsite disaster recovery, and organization-specific
+capacity qualification require external infrastructure and must not be
+inferred from unit tests on one laptop.
