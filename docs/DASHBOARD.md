@@ -18,9 +18,9 @@ the tab session, and is sent only to same-origin ULPF endpoints. Clear removes
 the saved tenant and token. The server does not create a dashboard session or
 set an authentication cookie.
 
-The dashboard refreshes every ten seconds while its tab is visible. Disable
-**Auto-refresh** to hold a snapshot, or select **Refresh** for an immediate
-update.
+The dashboard refreshes every ten seconds while its tab is visible. Select
+**Pause** to hold the event stream, **Resume** to continue, or **Refresh** for
+an immediate update.
 
 ## What it shows
 
@@ -30,6 +30,8 @@ update.
 - accepted and committed activity in twelve five-minute buckets;
 - interpretation status distribution;
 - the twenty newest committed events for the selected tenant;
+- source family, format, status, and text filters, time-order sorting, and a
+  selectable source-coverage rail computed from that same bounded event window;
 - connector pending, failed, and delivered counts;
 - local and configured peer-node freshness and availability;
 - environment and instance groups with filters that recompute totals, activity,
@@ -40,6 +42,26 @@ update.
 The trace inspector deliberately does not request or render raw event bytes.
 Raw evidence remains behind the separate `raw:read` scope and the receipt raw
 endpoint.
+
+## Populate the multi-source demo
+
+With the Compose stack running and `ULPF_API_TOKEN` set to the same value used
+to start it, seed synthetic examples from 14 source shapes and all seven
+built-in parser families:
+
+```bash
+./scripts/seed-dashboard-demo.py
+```
+
+The default two rounds admit 28 events through the live HTTP ingestion API and
+wait for their immutable revisions. The dashboard's bounded 20-event window
+then shows network, identity, cloud, endpoint, application, and infrastructure
+families across JSON, CEF, LEEF, key-value, Syslog, XML, and CSV inputs. Use
+`--list` to inspect the source catalog without sending data, or `--rounds 1` for
+a smaller sample.
+
+All payloads are explicitly synthetic compatibility examples. Product names
+identify sample input shapes and do not assert vendor certification.
 
 ## API boundary
 
@@ -90,7 +112,7 @@ same-origin referrer policy. The page has no third-party scripts, fonts,
 analytics, images, or network calls. This makes the dashboard available in the
 container and in an air-gapped deployment wherever the ULPF API is reachable.
 
-The design reference used during implementation is
-[`assets/dashboard-concept.png`](assets/dashboard-concept.png). The shipped UI
+The current design reference is
+[`assets/dashboard-concept-v2.png`](assets/dashboard-concept-v2.png). The shipped UI
 was browser-tested at desktop and mobile widths, including authenticated data,
 empty state, and responsive layout.

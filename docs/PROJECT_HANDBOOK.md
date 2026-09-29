@@ -253,6 +253,12 @@ docker compose up --build
 Open `http://localhost:8080/dashboard/` and enter tenant `demo` plus the ULPF
 token.
 
+Run `./scripts/seed-dashboard-demo.py` with the same token in
+`ULPF_API_TOKEN` to admit the synthetic multi-source demonstration. It covers
+14 source shapes and JSON, CEF, LEEF, key-value, Syslog, XML, and CSV parsing;
+the dashboard can filter the resulting event window by source family, format,
+status, or text.
+
 ## Air-gapped installation
 
 The offline builder emits architecture-specific image archives, image-only

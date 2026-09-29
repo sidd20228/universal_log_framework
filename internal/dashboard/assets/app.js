@@ -57,12 +57,20 @@
     refreshController: null,
     timer: null,
     previousFocus: null,
+    streamPaused: false,
+    sourceFamily: "",
+    format: "",
+    status: "",
+    search: "",
   };
 
   const element = (id) => document.getElementById(id);
   const ui = {
     form: element("connectionForm"), tenant: element("tenantInput"), token: element("tokenInput"),
-    disconnect: element("disconnectButton"), refresh: element("refreshButton"), autoRefresh: element("autoRefresh"),
+    disconnect: element("disconnectButton"), refresh: element("refreshButton"),
+    pauseStream: element("pauseStreamButton"), streamState: element("streamState"), sortTime: element("sortTimeButton"),
+    sourceFamilyFilter: element("sourceFamilyFilter"), formatFilter: element("formatFilter"), statusFilter: element("statusFilter"),
+    eventSearch: element("eventSearch"), clearFilters: element("clearFiltersButton"),
     notice: element("notice"), connectionDot: element("connectionDot"), connectionLabel: element("connectionLabel"),
     connectionDetail: element("connectionDetail"), sidebarTenant: element("sidebarTenant"), lastUpdated: element("lastUpdated"),
     totalReceipts: element("totalReceipts"), totalRevisions: element("totalRevisions"), rawBytes: element("rawBytes"),
@@ -70,6 +78,7 @@
     pipelineState: element("pipelineState"), pipelineStages: element("pipelineStages"), chart: element("activityChart"),
     chartSummary: element("chartSummary"), donut: element("statusDonut"), donutTotal: element("donutTotal"),
     statusList: element("statusList"), eventsBody: element("eventsBody"), eventCount: element("eventCount"), eventScope: element("eventScope"),
+    sourceCoverage: element("sourceCoverage"), sourceCoverageTotal: element("sourceCoverageTotal"), sourceCoverageSummary: element("sourceCoverageSummary"),
     environmentFilter: element("environmentFilter"), instanceFilter: element("instanceFilter"),
     scopeSummary: element("scopeSummary"), nodeGroups: element("nodeGroups"),
     pipelineDrawer: element("pipelineDrawer"), pipelineDetail: element("pipelineDetail"),
@@ -322,7 +331,8 @@
     state.activity = normalizeActivity(view);
     state.events = Array.isArray(view?.recent_events) ? view.recent_events : state.fallbackEvents;
     state.eventsNewestFirst = Array.isArray(view?.recent_events);
-    updateMetrics(view, state.health); updatePipeline(view); updateDistribution(view); drawActivityChart(); renderEvents(); renderNodeGroups(state.summary);
+    populateEventFilters();
+    updateMetrics(view, state.health); updatePipeline(view); updateDistribution(view); drawActivityChart(); renderEvents(); renderSourceCoverage(); renderNodeGroups(state.summary);
     ui.scopeSummary.textContent = `${scopeLabel} · ${originsOf(view).length || nodesOf(view).length || 0} runtime origin${(originsOf(view).length || nodesOf(view).length) === 1 ? "" : "s"}`;
     ui.eventScope.textContent = `${scopeLabel} · ${state.eventsNewestFirst ? "newest-first summary window" : "bounded event page fallback"}`;
   }
@@ -555,38 +565,108 @@
     return cell;
   }
 
-  function renderEvents() {
-    ui.eventsBody.replaceChildren();
-    if (state.events.length === 0) {
-      const row = document.createElement("tr"); row.className = "empty-row";
-      const cell = textCell(row, state.connected ? "No events were returned for this tenant." : "Connect to load event metadata.");
-      cell.colSpan = 7; ui.eventsBody.append(row);
-      ui.eventCount.textContent = "0 events shown";
+  function prettifyIdentifier(value) {
+    return String(value || "").replace(/^generic-/, "").replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function sourceIdentity(event) {
+    const hint = [event.source_name, event.source_profile_id, event.parser_id].filter(Boolean).join(" ").toLowerCase();
+    let family = String(event.source_family || "").trim();
+    if (!family) {
+      if (/palo|cisco|asa|firewall|network|qradar|\bips\b|\bids\b/.test(hint)) family = "Network";
+      else if (/okta|identity|auth|entra/.test(hint)) family = "Identity";
+      else if (/aws|cloudtrail|azure|gcp|cloud/.test(hint)) family = "Cloud";
+      else if (/windows|crowdstrike|endpoint|edr/.test(hint)) family = "Endpoint";
+      else if (/nginx|payment|application|app/.test(hint)) family = "Application";
+      else if (/kubernetes|linux|syslog|infra|oracle/.test(hint)) family = "Infrastructure";
+      else family = "Other";
+    }
+    const name = prettifyIdentifier(event.source_name) || prettifyIdentifier(event.source_profile_id) || prettifyIdentifier(event.parser_id) || "Unprofiled source";
+    const format = String(event.format || "").trim() || String(event.parser_id || "").replace(/^generic-/, "") || "unknown";
+    return { name, family, format: format.toUpperCase() };
+  }
+
+  function replaceFilterOptions(select, values, label, selected) {
+    const fragment = document.createDocumentFragment();
+    const all = document.createElement("option"); all.value = ""; all.textContent = label; fragment.append(all);
+    values.forEach((value) => { const option = document.createElement("option"); option.value = value; option.textContent = value; fragment.append(option); });
+    select.replaceChildren(fragment); select.value = values.includes(selected) ? selected : "";
+  }
+
+  function populateEventFilters() {
+    const families = [...new Set(state.events.map((item) => sourceIdentity(item).family))].sort();
+    const formats = [...new Set(state.events.map((item) => sourceIdentity(item).format))].sort();
+    const statuses = [...new Set(state.events.map((item) => String(item.status || "Unknown")))].sort();
+    replaceFilterOptions(ui.sourceFamilyFilter, families, "All source families", state.sourceFamily);
+    replaceFilterOptions(ui.formatFilter, formats, "All formats", state.format);
+    replaceFilterOptions(ui.statusFilter, statuses, "All statuses", state.status);
+    state.sourceFamily = ui.sourceFamilyFilter.value; state.format = ui.formatFilter.value; state.status = ui.statusFilter.value;
+  }
+
+  function filteredEvents() {
+    const query = state.search.toLowerCase();
+    const filtered = state.events.filter((event) => {
+      const identity = sourceIdentity(event);
+      if (state.sourceFamily && identity.family !== state.sourceFamily) return false;
+      if (state.format && identity.format !== state.format) return false;
+      if (state.status && String(event.status || "Unknown") !== state.status) return false;
+      if (!query) return true;
+      return [identity.name, identity.family, identity.format, event.transport, event.action, event.status, event.listener_id]
+        .filter(Boolean).join(" ").toLowerCase().includes(query);
+    });
+    return state.eventsNewestFirst ? filtered : [...filtered].reverse();
+  }
+
+  function renderSourceCoverage() {
+    ui.sourceCoverage.replaceChildren();
+    const groups = new Map();
+    state.events.forEach((event) => { const family = sourceIdentity(event).family; groups.set(family, (groups.get(family) || 0) + 1); });
+    ui.sourceCoverageTotal.textContent = String(groups.size);
+    if (groups.size === 0) {
+      const empty = document.createElement("p"); empty.className = "node-empty"; empty.textContent = state.connected ? "No sources in this event window." : "Source families appear here."; ui.sourceCoverage.append(empty);
+      ui.sourceCoverageSummary.textContent = state.connected ? "No recent source metadata was returned." : "Connect to inspect source diversity.";
       return;
     }
-    const displayed = state.eventsNewestFirst ? state.events : [...state.events].reverse();
+    [...groups.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).forEach(([family, count]) => {
+      const button = document.createElement("button"); button.type = "button"; button.className = `source-family${state.sourceFamily === family ? " selected" : ""}`;
+      button.setAttribute("aria-pressed", state.sourceFamily === family ? "true" : "false");
+      const mark = document.createElement("i"); mark.className = "family-mark"; mark.setAttribute("aria-hidden", "true");
+      const label = document.createElement("span"); label.textContent = family;
+      const value = document.createElement("strong"); value.textContent = String(count);
+      button.append(mark, label, value);
+      button.addEventListener("click", () => { state.sourceFamily = state.sourceFamily === family ? "" : family; ui.sourceFamilyFilter.value = state.sourceFamily; renderEvents(); renderSourceCoverage(); announce(state.sourceFamily ? `Showing ${family} events` : "Showing all source families"); });
+      ui.sourceCoverage.append(button);
+    });
+    ui.sourceCoverageSummary.textContent = `${state.events.length} recent events across ${groups.size} source ${groups.size === 1 ? "family" : "families"}. Select a family to filter.`;
+  }
+
+  function renderEvents() {
+    ui.eventsBody.replaceChildren();
+    const displayed = filteredEvents();
+    if (displayed.length === 0) {
+      const row = document.createElement("tr"); row.className = "empty-row";
+      const message = state.events.length ? "No events match the selected filters." : state.connected ? "No events were returned for this tenant." : "Connect to load event metadata.";
+      const cell = textCell(row, message); cell.colSpan = 7; ui.eventsBody.append(row); ui.eventCount.textContent = "0 events shown"; return;
+    }
     displayed.forEach((event) => {
-      const row = document.createElement("tr");
-      row.dataset.revision = event.revision_id || "";
+      const identity = sourceIdentity(event);
+      const row = document.createElement("tr"); row.dataset.revision = event.revision_id || "";
       if (state.selectedRevision === event.revision_id) row.classList.add("selected");
-      textCell(row, formatTime(event.received_at));
-      const origin = [event.environment_id, event.instance_id].filter(Boolean).join(":");
-      const source = [origin, event.source_profile_id, event.parser_id].filter(Boolean).join(" / ");
-      textCell(row, source || "Unprofiled");
-      const statusCell = document.createElement("td");
-      const status = document.createElement("span"); status.className = `status-pill ${eventStatusClass(event.status)}`; status.textContent = event.status || "Unknown";
-      statusCell.append(status); row.append(statusCell);
+      textCell(row, formatTime(event.received_at, false));
+      const sourceCell = document.createElement("td");
+      const source = document.createElement("div"); source.className = "source-cell";
+      const monogram = document.createElement("span"); monogram.className = "source-monogram"; monogram.textContent = identity.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+      const copy = document.createElement("span"); const sourceName = document.createElement("strong"); sourceName.textContent = identity.name; sourceName.title = identity.name;
+      const family = document.createElement("small"); family.textContent = identity.family; copy.append(sourceName, family); source.append(monogram, copy); sourceCell.append(source); row.append(sourceCell);
+      const formatCell = document.createElement("td"); const format = document.createElement("span"); format.className = "format-tag"; format.textContent = identity.format; formatCell.append(format); row.append(formatCell);
+      textCell(row, prettifyIdentifier(event.transport) || "Indexed");
+      const statusCell = document.createElement("td"); const status = document.createElement("span"); status.className = `status-pill ${eventStatusClass(event.status)}`; status.textContent = String(event.status || "Unknown").replaceAll("_", " "); statusCell.append(status); row.append(statusCell);
       textCell(row, event.action || "—");
-      const quality = numberOrNull(event.quality_score);
-      textCell(row, quality === null ? "—" : `${Math.round(quality * 100)}%`);
-      const hash = textCell(row, compactHash(event.raw_sha256), "hash"); hash.title = event.raw_sha256 || "";
-      const action = document.createElement("td");
-      const button = document.createElement("button"); button.type = "button"; button.className = "inspect-button"; button.textContent = "Inspect";
-      button.setAttribute("aria-label", `Inspect event ${event.revision_id || event.receipt_id || "metadata"}`);
-      button.addEventListener("click", () => inspectEvent(event, button));
+      const action = document.createElement("td"); const button = document.createElement("button"); button.type = "button"; button.className = "inspect-button"; button.textContent = "Inspect";
+      button.setAttribute("aria-label", `Inspect event ${event.revision_id || event.receipt_id || "metadata"}`); button.addEventListener("click", () => inspectEvent(event, button));
       action.append(button); row.append(action); ui.eventsBody.append(row);
     });
-    ui.eventCount.textContent = `${formatCount(state.events.length)} event${state.events.length === 1 ? "" : "s"} shown`;
+    ui.eventCount.textContent = `${formatCount(displayed.length)} of ${formatCount(state.events.length)} event${state.events.length === 1 ? "" : "s"} shown`;
   }
 
   function detailRow(label, value) {
@@ -702,12 +782,14 @@
 
   function resetData() {
     state.summary = null; state.health = null; state.fallbackEvents = []; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
+    state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = "";
+    ui.eventSearch.value = "";
     replaceSelectOptions(ui.environmentFilter, [], "All environments", "");
     replaceSelectOptions(ui.instanceFilter, [], "All instances", "");
     ui.nodeGroups.replaceChildren();
     const empty = document.createElement("p"); empty.className = "node-empty"; empty.textContent = "Node availability will appear after connection."; ui.nodeGroups.append(empty);
     ui.scopeSummary.textContent = "Connect to load runtime origins.";
-    updateMetrics(null, null); updatePipeline(null); updateDistribution(null); drawActivityChart(); renderEvents();
+    populateEventFilters(); updateMetrics(null, null); updatePipeline(null); updateDistribution(null); drawActivityChart(); renderEvents(); renderSourceCoverage();
     ui.lastUpdated.textContent = "—"; ui.eventScope.textContent = "Newest-first summary window";
   }
 
@@ -761,11 +843,22 @@
   function scheduleRefresh() {
     if (state.timer) window.clearInterval(state.timer);
     state.timer = null;
-    if (ui.autoRefresh.checked) {
+    if (!state.streamPaused) {
       state.timer = window.setInterval(() => {
         if (!document.hidden && state.tenant && state.token) refresh({ quiet: true });
       }, REFRESH_INTERVAL_MS);
     }
+  }
+
+  function toggleStream() {
+    state.streamPaused = !state.streamPaused;
+    ui.pauseStream.textContent = state.streamPaused ? "Resume" : "Pause";
+    ui.pauseStream.setAttribute("aria-pressed", state.streamPaused ? "true" : "false");
+    ui.streamState.textContent = state.streamPaused ? "Paused" : "Live";
+    const dot = ui.streamState.previousElementSibling;
+    if (dot) dot.className = `status-dot ${state.streamPaused ? "idle" : "live"}`;
+    scheduleRefresh(); announce(state.streamPaused ? "Live event refresh paused" : "Live event refresh resumed");
+    if (!state.streamPaused && state.tenant && state.token) refresh({ quiet: true });
   }
 
   function connect(event) {
@@ -792,7 +885,13 @@
   ui.form.addEventListener("submit", connect);
   ui.disconnect.addEventListener("click", disconnect);
   ui.refresh.addEventListener("click", () => refresh());
-  ui.autoRefresh.addEventListener("change", scheduleRefresh);
+  ui.pauseStream.addEventListener("click", () => toggleStream());
+  ui.sourceFamilyFilter.addEventListener("change", () => { state.sourceFamily = ui.sourceFamilyFilter.value; renderEvents(); renderSourceCoverage(); });
+  ui.formatFilter.addEventListener("change", () => { state.format = ui.formatFilter.value; renderEvents(); });
+  ui.statusFilter.addEventListener("change", () => { state.status = ui.statusFilter.value; renderEvents(); });
+  ui.eventSearch.addEventListener("input", () => { state.search = ui.eventSearch.value.trim(); renderEvents(); });
+  ui.clearFilters.addEventListener("click", () => { state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = ""; ui.eventSearch.value = ""; populateEventFilters(); renderEvents(); renderSourceCoverage(); announce("Event filters cleared"); });
+  ui.sortTime.addEventListener("click", () => { state.eventsNewestFirst = !state.eventsNewestFirst; ui.sortTime.textContent = state.eventsNewestFirst ? "Time ↓" : "Time ↑"; renderEvents(); });
   ui.environmentFilter.addEventListener("change", () => { populateScopeFilters(state.summary); applyScope(); });
   ui.instanceFilter.addEventListener("change", applyScope);
   ui.pipelineStages.addEventListener("click", (event) => {
@@ -819,7 +918,7 @@
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
   });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.tenant && state.token) refresh({ quiet: true }); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !state.streamPaused && state.tenant && state.token) refresh({ quiet: true }); });
   window.addEventListener("resize", drawActivityChart, { passive: true });
 
   ui.tenant.value = getSession(STORAGE_TENANT);

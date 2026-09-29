@@ -92,6 +92,9 @@ func TestSQLiteReaderReturnsTenantScopedBoundedSummary(t *testing.T) {
 	if summary.RecentEvents[0].TenantID != "tenant-a" || summary.RecentEvents[0].RawSHA256 != strings.Repeat("a", 64) || summary.RecentEvents[0].Action != "allow" || summary.RecentEvents[0].QualityScore == nil || *summary.RecentEvents[0].QualityScore != 0.9 {
 		t.Fatalf("recent event metadata = %+v", summary.RecentEvents[0])
 	}
+	if summary.RecentEvents[0].SourceName != "Test Firewall" || summary.RecentEvents[0].SourceFamily != "Network" || summary.RecentEvents[0].Format != "json" || summary.RecentEvents[0].Transport != "http" || summary.RecentEvents[0].ListenerID != "test" {
+		t.Fatalf("recent event source metadata = %+v", summary.RecentEvents[0])
+	}
 	body, err := json.Marshal(summary)
 	if err != nil {
 		t.Fatal(err)
@@ -188,6 +191,7 @@ func insertRevision(t *testing.T, database *sql.DB, id, receiptID, status, parse
 	envelopeBody, err := json.Marshal(map[string]any{
 		"raw":     map[string]any{"sha256": strings.Repeat("a", 64)},
 		"event":   map[string]any{"action": "allow"},
+		"parsed":  map[string]any{"format": "json", "fields": map[string]any{"source_name": "Test Firewall", "source_family": "Network"}},
 		"quality": map[string]any{"score": 0.9},
 	})
 	if err != nil {

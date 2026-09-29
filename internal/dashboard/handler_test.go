@@ -19,7 +19,7 @@ func TestHandlerServesEmbeddedDashboard(t *testing.T) {
 		contains    string
 		cache       string
 	}{
-		{path: "/dashboard/", contentType: "text/html", contains: "Event processing overview", cache: "no-store"},
+		{path: "/dashboard/", contentType: "text/html", contains: "Universal event pipeline", cache: "no-store"},
 		{path: "/dashboard/styles.css", contentType: "text/css", contains: "--navy", cache: "must-revalidate"},
 		{path: "/dashboard/app.js", contentType: "text/javascript", contains: "/api/v1/dashboard/summary", cache: "must-revalidate"},
 	}
@@ -179,6 +179,36 @@ func TestDashboardPipelineStagesOpenDetailPane(t *testing.T) {
 	for _, behavior := range []string{"openPipelineStage", "closePipelineStage", `pipelineStages.addEventListener("click"`} {
 		if !strings.Contains(script, behavior) {
 			t.Fatalf("dashboard is missing pipeline interaction %q", behavior)
+		}
+	}
+}
+
+func TestDashboardExposesInteractiveSourceCoverage(t *testing.T) {
+	page, err := fs.ReadFile(embedded, "assets/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	markup := string(page)
+	for _, identifier := range []string{
+		`id="sourceCoverage"`, `id="sourceFamilyFilter"`, `id="formatFilter"`,
+		`id="statusFilter"`, `id="eventSearch"`, `id="pauseStreamButton"`,
+	} {
+		if !strings.Contains(markup, identifier) {
+			t.Fatalf("dashboard is missing interactive source control %s", identifier)
+		}
+	}
+	if !strings.Contains(markup, "Universal event pipeline") || !strings.Contains(markup, "Raw evidence in. Traceable intelligence out.") {
+		t.Fatal("dashboard is missing the source-focused primary heading")
+	}
+
+	application, err := fs.ReadFile(embedded, "assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(application)
+	for _, behavior := range []string{"renderSourceCoverage", "filteredEvents", "toggleStream", "sourceIdentity"} {
+		if !strings.Contains(script, behavior) {
+			t.Fatalf("dashboard is missing interactive source behavior %q", behavior)
 		}
 	}
 }

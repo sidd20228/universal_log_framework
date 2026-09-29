@@ -76,6 +76,11 @@ type RecentEvent struct {
 	InstanceID      string    `json:"instance_id,omitempty"`
 	ReceivedAt      time.Time `json:"received_at"`
 	SourceProfileID string    `json:"source_profile_id,omitempty"`
+	SourceName      string    `json:"source_name,omitempty"`
+	SourceFamily    string    `json:"source_family,omitempty"`
+	Format          string    `json:"format,omitempty"`
+	Transport       string    `json:"transport,omitempty"`
+	ListenerID      string    `json:"listener_id,omitempty"`
 	Status          string    `json:"status"`
 	ParserID        string    `json:"parser_id,omitempty"`
 	RawSHA256       string    `json:"raw_sha256"`
@@ -342,9 +347,41 @@ WHERE r.tenant_id = ? AND rv.created_at_ns >= ? AND rv.created_at_ns < ? GROUP B
 func readRecent(ctx context.Context, tx *sql.Tx, tenantID string) ([]RecentEvent, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT r.receipt_id, rv.revision_id, r.tenant_id,
 COALESCE(r.environment_id, ''), COALESCE(r.instance_id, ''), r.received_at_ns,
-COALESCE(r.source_profile_id, ''), COALESCE(json_extract(rv.revision_json, '$.status'), ''),
+COALESCE(r.source_profile_id, ''),
+SUBSTR(COALESCE(
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.source_name') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.source.name') AS TEXT),
+  NULLIF(TRIM(COALESCE(CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.device_vendor') AS TEXT), '') || ' ' || COALESCE(CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.device_product') AS TEXT), '')), ''),
+  NULLIF(TRIM(COALESCE(CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.vendor') AS TEXT), '') || ' ' || COALESCE(CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.product') AS TEXT), '')), ''),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.device_product') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.header.product') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.attributes.source_name') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.event.source_name') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.records[0].source_name') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.app_name') AS TEXT),
+  r.source_profile_id, ''
+), 1, 160),
+SUBSTR(COALESCE(
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.source_family') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.source.family') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.attributes.source_family') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.event.source_family') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.records[0].source_family') AS TEXT),
+  ''
+), 1, 80),
+SUBSTR(COALESCE(CAST(json_extract(rv.envelope_json, '$.parsed.format') AS TEXT), ''), 1, 64),
+COALESCE(r.transport, ''), COALESCE(r.listener_id, ''),
+COALESCE(json_extract(rv.revision_json, '$.status'), ''),
 COALESCE(json_extract(rv.revision_json, '$.parser.id'), ''), r.raw_sha256,
-COALESCE(CAST(json_extract(rv.envelope_json, '$.event.action') AS TEXT), ''),
+SUBSTR(COALESCE(
+  CAST(json_extract(rv.envelope_json, '$.event.action') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.action') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.attributes.action') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.attributes.act') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.event.action') AS TEXT),
+  CAST(json_extract(rv.envelope_json, '$.parsed.fields.records[0].action') AS TEXT),
+  ''
+), 1, 80),
 json_extract(rv.envelope_json, '$.quality.score')
 FROM revisions rv JOIN receipts r ON r.receipt_id = rv.receipt_id
 WHERE r.tenant_id = ? ORDER BY rv.created_at_ns DESC, rv.revision_id DESC LIMIT ?`, tenantID, recentLimit)
@@ -357,7 +394,7 @@ WHERE r.tenant_id = ? ORDER BY rv.created_at_ns DESC, rv.revision_id DESC LIMIT 
 		var item RecentEvent
 		var receivedAt int64
 		var quality sql.NullFloat64
-		if err := rows.Scan(&item.ReceiptID, &item.RevisionID, &item.TenantID, &item.EnvironmentID, &item.InstanceID, &receivedAt, &item.SourceProfileID, &item.Status, &item.ParserID, &item.RawSHA256, &item.Action, &quality); err != nil {
+		if err := rows.Scan(&item.ReceiptID, &item.RevisionID, &item.TenantID, &item.EnvironmentID, &item.InstanceID, &receivedAt, &item.SourceProfileID, &item.SourceName, &item.SourceFamily, &item.Format, &item.Transport, &item.ListenerID, &item.Status, &item.ParserID, &item.RawSHA256, &item.Action, &quality); err != nil {
 			return nil, fmt.Errorf("scan recent event: %w", err)
 		}
 		item.ReceivedAt = time.Unix(0, receivedAt).UTC()

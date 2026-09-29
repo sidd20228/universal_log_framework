@@ -42,6 +42,16 @@ pipeline totals, activity, interpretation status, recent events, and trace
 metadata. See the [dashboard guide](docs/DASHBOARD.md) for its authorization,
 raw-evidence, delivery, and federation boundaries.
 
+Populate the dashboard with synthetic examples from 14 security and operations
+source shapes across every built-in parser family:
+
+```sh
+./scripts/seed-dashboard-demo.py
+```
+
+The source names describe compatibility examples and are not vendor
+certification claims.
+
 Admit one JSON occurrence. The body is sent as bytes rather than decoded by
 the HTTP layer:
 
