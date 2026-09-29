@@ -1,0 +1,14 @@
+{
+  "profile_version": "ulpf-benchmark-profile/1",
+  "name": "local-single-process-mixed-v1",
+  "tenant_id": "benchmark",
+  "listener_id": "benchmark-local",
+  "pipeline_version": "1.0.0",
+  "max_event_bytes": 65536,
+  "lease_duration_ms": 30000,
+  "renew_interval_ms": 10000,
+  "processing_timeout_ms": 2000,
+  "max_attempts": 1,
+  "capture_profiles": true
+}
+

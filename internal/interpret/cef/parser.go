@@ -261,6 +261,10 @@ func parseCEFExtension(input []byte, maxFields, baseOffset int) (map[string]any,
 					next = candidate
 					break
 				}
+				// The whole whitespace run belongs to the current value. Advancing
+				// once keeps parsing linear for padded or unusually long values.
+				position = candidate
+				continue
 			}
 			position++
 		}

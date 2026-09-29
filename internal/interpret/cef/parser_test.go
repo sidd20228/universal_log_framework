@@ -1,6 +1,7 @@
 package cef
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -43,6 +44,19 @@ func TestCEFHeaderEscapesAndValueSpaces(t *testing.T) {
 	want := map[string]any{"msg": "hello world", "act": "deny", "equation": "a=b", "path": `c:\tmp`}
 	if !reflect.DeepEqual(extension, want) {
 		t.Fatalf("extension = %#v, want %#v", extension, want)
+	}
+}
+
+func TestCEFTrailingWhitespaceRemainsPartOfValue(t *testing.T) {
+	input := append([]byte(`CEF:0|V|P|1|id|name|3|msg=value`), bytes.Repeat([]byte{' '}, 64<<10)...)
+	result := NewCEF().Parse(context.Background(), interpret.Payload{Bytes: input}, interpret.Limits{MaxInputBytes: len(input)})
+	if result.Status != interpret.StatusParsed {
+		t.Fatalf("status = %s, issues = %+v", result.Status, result.Issues)
+	}
+	extension := result.Document.Fields["extension"].(map[string]any)
+	value, ok := extension["msg"].(string)
+	if !ok || len(value) != len("value")+(64<<10) {
+		t.Fatalf("msg length = %d, ok = %v", len(value), ok)
 	}
 }
 
