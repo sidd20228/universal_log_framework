@@ -1,0 +1,106 @@
+{
+  "report_version": "ulpf-performance-report/1",
+  "generated_at": "2026-09-29T00:12:32.711314Z",
+  "scope": "single-process local filesystem evidence + SQLite inbox + built-in detection/parsing + SQLite envelope commit",
+  "claim": "Measured on the recorded host and generated dataset only; this is not a production, network-ingress, ClickHouse, multi-node, sustained-load, or capacity result.",
+  "scenario": "synthetic-mixed-v1",
+  "seed": 20260929,
+  "config": {
+    "profile_version": "ulpf-benchmark-profile/1",
+    "name": "local-single-process-mixed-v1",
+    "tenant_id": "benchmark",
+    "listener_id": "benchmark-local",
+    "pipeline_version": "1.0.0",
+    "max_event_bytes": 65536,
+    "lease_duration_ms": 30000,
+    "renew_interval_ms": 10000,
+    "processing_timeout_ms": 2000,
+    "max_attempts": 1,
+    "capture_profiles": true
+  },
+  "provenance": {
+    "git_commit": "28e74af17c78b136b016b908c89038da8f6384dd",
+    "git_dirty": false,
+    "code_sha256": "e428c6f1d712435094720b544e4fa252a9180a4c44593fe8e96aaae4c5b14270",
+    "scenario_sha256": "57da9b174e9ae5551a91d2424276db14917c2f484a766df4170e00796198cbb9",
+    "config_sha256": "352b57894bbe9e27fd502fd69280c9de6d89c585aca3e90f18501a3d90c37387",
+    "dataset_sha256": "b048d86461c8e8bf5f71cc3a2fbf25f93f8863525419f5cfc46bdfc1d372201f",
+    "go_version": "go1.27.0",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "logical_cpus": 10,
+    "gomaxprocs": 10,
+    "cpu_model": "Apple M4",
+    "memory_bytes": 17179869184
+  },
+  "measurements": {
+    "submitted": 100,
+    "accepted": 100,
+    "rejected": 0,
+    "revisions": 100,
+    "raw_verified": 100,
+    "hash_mismatches": 0,
+    "linkage_failures": 0,
+    "statuses": {
+      "PARTIALLY_PARSED": 90,
+      "UNPARSED": 10
+    },
+    "wall_time_ns": 1178133709,
+    "throughput_events_per_second": 84.88000915013289,
+    "durable_acceptance_latency": {
+      "samples": 100,
+      "min_ns": 8806500,
+      "p50_ns": 10091792,
+      "p95_ns": 15465792,
+      "p99_ns": 25826000,
+      "max_ns": 30192833
+    },
+    "processing_latency": {
+      "samples": 100,
+      "min_ns": 251834,
+      "p50_ns": 474042,
+      "p95_ns": 1583666,
+      "p99_ns": 2236375,
+      "max_ns": 2542625
+    },
+    "receipt_to_revision_latency": {
+      "samples": 100,
+      "min_ns": 79662458,
+      "p50_ns": 551833625,
+      "p95_ns": 1044081250,
+      "p99_ns": 1079378875,
+      "max_ns": 1108957666
+    },
+    "allocations": {
+      "total_bytes": 46301672,
+      "total_objects": 67378,
+      "bytes_per_event": 463016.72,
+      "objects_per_event": 673.78,
+      "heap_before_bytes": 3467176,
+      "heap_after_bytes": 6019384,
+      "heap_sys_after_bytes": 11468800
+    },
+    "resources": {
+      "user_cpu_seconds": 0.076674,
+      "system_cpu_seconds": 0.101173,
+      "total_cpu_seconds": 0.177847,
+      "process_cpu_percent": 15.095654987323687,
+      "peak_rss_bytes": 31457280
+    },
+    "storage": {
+      "raw_payload_bytes": 1745923,
+      "working_set_logical_bytes": 6976187,
+      "logical_write_ratio": 3.995701414094436
+    }
+  },
+  "artifacts": [
+    {
+      "path": "cpu.pprof",
+      "sha256": "e0a75814d9b44fc08f27ae49d79289b68e465e687d49865ba19a7b69ad9c3e46"
+    },
+    {
+      "path": "heap.pprof",
+      "sha256": "29176a95d2e7c91155d3dbfa12b0c1320f71e202714e4c989b7e67e3f062d08c"
+    }
+  ]
+}
