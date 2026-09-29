@@ -45,7 +45,7 @@ def tar_bytes(entries):
             archive.addfile(info, io.BytesIO(body))
     return output.getvalue()
 
-def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False, unknown_field=False):
+def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False, unknown_field=False, external_layer=False):
     layer = tar_bytes([("fixture.txt", f"{name}\n".encode())])
     layer_digest = hashlib.sha256(layer).hexdigest()
     declared_digest = "0" * 64 if bad_diff_id else layer_digest
@@ -62,6 +62,14 @@ def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False, 
         "RepoTags": [tag],
         "Layers": [layer_name],
         "Parent": "sha256:" + "1" * 64,
+        "LayerSources": {
+            f"sha256:{declared_digest}": {
+                "mediaType": "application/vnd.oci.image.layer.v1.tar",
+                "digest": f"sha256:{layer_digest}",
+                "size": len(layer),
+                **({"urls": ["https://registry.example.test/layer"]} if external_layer else {}),
+            }
+        },
     }
     if unknown_field:
         manifest_entry["Unexpected"] = True
@@ -78,6 +86,7 @@ image("wrong-tag", "unrelated:1.2.3")
 image("missing-layer", "ulpf:1.2.3", omit_layer=True)
 image("wrong-layer-digest", "ulpf:1.2.3", bad_diff_id=True)
 image("unknown-manifest-field", "ulpf:1.2.3", unknown_field=True)
+image("external-layer-source", "ulpf:1.2.3", external_layer=True)
 PY
 
 build_bundle() {
@@ -342,5 +351,6 @@ expect_image_rejected wrong-tag "$fixture/images/wrong-tag.tar"
 expect_image_rejected missing-layer "$fixture/images/missing-layer.tar"
 expect_image_rejected wrong-layer-digest "$fixture/images/wrong-layer-digest.tar"
 expect_image_rejected unknown-manifest-field "$fixture/images/unknown-manifest-field.tar"
+expect_image_rejected external-layer-source "$fixture/images/external-layer-source.tar"
 
 printf '%s\n' 'offline bundle tests passed'

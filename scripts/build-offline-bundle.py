@@ -89,6 +89,32 @@ def validate_image_tag(role, tag, version):
     return tag
 
 
+def validate_layer_sources(value, diff_ids, label):
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        fail(f"{label} LayerSources must be an object")
+    allowed = {"mediaType", "digest", "size", "urls", "annotations", "platform"}
+    for diff_id, descriptor in value.items():
+        if diff_id not in diff_ids:
+            fail(f"{label} LayerSources key does not match a rootfs diff_id")
+        if not isinstance(descriptor, dict) or not {"mediaType", "digest", "size"}.issubset(descriptor) or not set(descriptor).issubset(allowed):
+            fail(f"{label} LayerSources descriptor is incomplete or contains unknown fields")
+        if not isinstance(descriptor["mediaType"], str) or not descriptor["mediaType"]:
+            fail(f"{label} LayerSources media type is invalid")
+        if not isinstance(descriptor["digest"], str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", descriptor["digest"]):
+            fail(f"{label} LayerSources digest is invalid")
+        if type(descriptor["size"]) is not int or descriptor["size"] < 0:
+            fail(f"{label} LayerSources size is invalid")
+        if descriptor.get("urls") not in (None, []):
+            fail(f"{label} uses external layer URLs, which are forbidden in an offline release")
+        annotations = descriptor.get("annotations")
+        if annotations is not None and (not isinstance(annotations, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in annotations.items())):
+            fail(f"{label} LayerSources annotations are invalid")
+        if descriptor.get("platform") is not None and not isinstance(descriptor["platform"], dict):
+            fail(f"{label} LayerSources platform is invalid")
+
+
 def inspect_docker_image(path, architecture, role, version):
     source = regular_source(path, f"image.{role}")
     try:
@@ -119,8 +145,6 @@ def inspect_docker_image(path, architecture, role, version):
         if parent is not None and (not isinstance(parent, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", parent)):
             fail(f"image.{role} manifest parent is invalid")
         layer_sources = entry.get("LayerSources")
-        if layer_sources not in (None, {}):
-            fail(f"image.{role} uses external layer sources, which are forbidden in an offline release")
         config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
         legacy_config = re.fullmatch(r"([0-9a-f]{64})\.json", config_name) if isinstance(config_name, str) else None
         oci_config = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", config_name) if isinstance(config_name, str) else None
@@ -145,6 +169,7 @@ def inspect_docker_image(path, architecture, role, version):
         diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, dict) and rootfs.get("type") == "layers" else None
         if not isinstance(diff_ids, list) or len(diff_ids) != len(layers) or not all(isinstance(item, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", item) for item in diff_ids):
             fail(f"image.{role} rootfs diff_ids must match the layer count")
+        validate_layer_sources(layer_sources, set(diff_ids), f"image.{role}")
         for index, layer_name in enumerate(layers):
             canonical = safe_image_member(layer_name, f"image.{role}")
             layer = members.get(canonical)
