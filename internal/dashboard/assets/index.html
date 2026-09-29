@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Live Universal Log Pre-processing Framework operator dashboard">
+  <title>ULPF · Event processing overview</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+  <script src="/dashboard/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to dashboard</a>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="brand" href="#overview" aria-label="ULPF dashboard home">
+        <span class="brand-mark" aria-hidden="true">U</span>
+        <span><strong>ULPF</strong><small>Universal Log<br>Pre-processing Framework</small></span>
+      </a>
+      <nav>
+        <a class="nav-link active" href="#overview"><span aria-hidden="true">⌂</span>Overview</a>
+        <a class="nav-link" href="#recent"><span aria-hidden="true">≡</span>Events</a>
+        <a class="nav-link" href="#pipeline"><span aria-hidden="true">⌁</span>Pipeline</a>
+        <a class="nav-link" href="#activity"><span aria-hidden="true">⌁</span>Activity</a>
+        <a class="nav-link" href="#connection"><span aria-hidden="true">⚙</span>Connection</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="sidebarTenant">No tenant</span>
+        <span>ULPF dashboard</span>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar" id="connection">
+        <form id="connectionForm" class="connection-form" autocomplete="off">
+          <label>Tenant
+            <input id="tenantInput" name="tenant" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" placeholder="demo" spellcheck="false">
+          </label>
+          <label>API token
+            <input id="tokenInput" name="token" type="password" required minlength="32" maxlength="512" placeholder="Stored for this tab only" autocomplete="off" spellcheck="false">
+          </label>
+          <button class="button primary" type="submit">Connect</button>
+          <button class="button quiet" id="disconnectButton" type="button">Clear</button>
+        </form>
+        <div class="connection-state" aria-live="polite">
+          <span class="status-dot idle" id="connectionDot" aria-hidden="true"></span>
+          <span><strong id="connectionLabel">Not connected</strong><small id="connectionDetail">Enter tenant and token</small></span>
+        </div>
+        <button class="button refresh" id="refreshButton" type="button" aria-label="Refresh dashboard data">↻ <span>Refresh</span></button>
+      </header>
+
+      <main id="main-content" tabindex="-1">
+        <section class="hero" id="overview" aria-labelledby="pageTitle">
+          <div>
+            <p class="eyebrow">OPERATIONS / LIVE PIPELINE</p>
+            <h1 id="pageTitle">Event processing overview</h1>
+            <p>Live pipeline state, evidence preservation and interpretation activity.</p>
+          </div>
+          <div class="updated"><span>Last updated</span><strong id="lastUpdated">—</strong></div>
+        </section>
+
+        <div class="notice" id="notice" role="status" aria-live="polite">
+          Connect with a tenant and bearer token to load live event metadata.
+        </div>
+
+        <section class="metric-grid" aria-label="Pipeline totals">
+          <article class="metric-card">
+            <span class="metric-icon blue" aria-hidden="true">▤</span>
+            <div><span>Total receipts</span><strong id="totalReceipts">—</strong><small id="receiptHint">durably admitted</small></div>
+          </article>
+          <article class="metric-card">
+            <span class="metric-icon cyan" aria-hidden="true">⌘</span>
+            <div><span>Processed revisions</span><strong id="totalRevisions">—</strong><small id="revisionHint">immutable interpretations</small></div>
+          </article>
+          <article class="metric-card">
+            <span class="metric-icon teal" aria-hidden="true">◉</span>
+            <div><span>Raw bytes preserved</span><strong id="rawBytes">—</strong><small>content-addressed evidence</small></div>
+          </article>
+          <article class="metric-card">
+            <span class="metric-icon green" aria-hidden="true">⌁</span>
+            <div><span>Processing health</span><strong id="healthMetric">—</strong><small id="healthHint">Checking readiness</small></div>
+          </article>
+        </section>
+
+        <section class="panel pipeline-panel" id="pipeline" aria-labelledby="pipelineTitle">
+          <div class="panel-head">
+            <div><p class="eyebrow">DURABLE FLOW</p><h2 id="pipelineTitle">Five-stage pipeline</h2></div>
+            <span class="live-label"><span class="status-dot idle" id="pipelineDot" aria-hidden="true"></span><span id="pipelineState">Waiting</span></span>
+          </div>
+          <ol class="pipeline" id="pipelineStages">
+            <li data-stage="frame"><span class="stage-num">01</span><div><strong>Frame</strong><b>—</b><small>Transport boundaries</small></div></li>
+            <li data-stage="admit"><span class="stage-num">02</span><div><strong>Admit</strong><b>—</b><small>Durable receipt</small></div></li>
+            <li data-stage="interpret"><span class="stage-num">03</span><div><strong>Interpret</strong><b>—</b><small>Detect and parse</small></div></li>
+            <li data-stage="commit"><span class="stage-num">04</span><div><strong>Commit</strong><b>—</b><small>Immutable revision</small></div></li>
+            <li data-stage="deliver"><span class="stage-num">05</span><div><strong>Deliver</strong><b>—</b><small>SIEM / data lake</small></div></li>
+          </ol>
+        </section>
+
+        <section class="visual-grid" id="activity">
+          <article class="panel chart-panel" aria-labelledby="activityTitle">
+            <div class="panel-head">
+              <div><p class="eyebrow">RECENT WINDOW</p><h2 id="activityTitle">Event activity</h2></div>
+              <div class="legend" aria-hidden="true"><span><i class="accepted"></i>Accepted</span><span><i class="committed"></i>Committed</span></div>
+            </div>
+            <div class="canvas-wrap">
+              <canvas id="activityChart" role="img" aria-label="No event activity loaded"></canvas>
+            </div>
+            <p class="chart-summary" id="chartSummary">Activity data will appear after connection.</p>
+          </article>
+
+          <article class="panel distribution-panel" aria-labelledby="distributionTitle">
+            <div class="panel-head"><div><p class="eyebrow">QUALITY</p><h2 id="distributionTitle">Status distribution</h2></div></div>
+            <div class="distribution-body">
+              <div class="donut" id="statusDonut" role="img" aria-label="No status distribution loaded"><span><strong id="donutTotal">—</strong><small>events</small></span></div>
+              <ul class="status-list" id="statusList">
+                <li><span class="status-swatch parsed"></span><span>Parsed</span><strong>—</strong></li>
+                <li><span class="status-swatch partial"></span><span>Partially parsed</span><strong>—</strong></li>
+                <li><span class="status-swatch failed"></span><span>Failed</span><strong>—</strong></li>
+                <li><span class="status-swatch other"></span><span>Other</span><strong>—</strong></li>
+              </ul>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel events-panel" id="recent" aria-labelledby="eventsTitle">
+          <div class="panel-head">
+            <div><p class="eyebrow">TENANT-SCOPED</p><h2 id="eventsTitle">Recent events</h2></div>
+            <label class="toggle"><input id="autoRefresh" type="checkbox" checked><span aria-hidden="true"></span>Auto-refresh</label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Received</th><th>Source</th><th>Status</th><th>Action</th><th>Quality</th><th>Raw SHA-256</th><th><span class="sr-only">Inspect</span></th></tr></thead>
+              <tbody id="eventsBody"><tr class="empty-row"><td colspan="7">Connect to load event metadata.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-foot"><span id="eventCount">0 events shown</span><span id="eventScope">Newest-first summary window</span></div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="trace-drawer" id="traceDrawer" aria-labelledby="traceTitle" aria-hidden="true">
+      <div class="drawer-head">
+        <div><p class="eyebrow">END-TO-END PROVENANCE</p><h2 id="traceTitle">Trace inspector</h2><p>Receipt, evidence and processing metadata.</p></div>
+        <button class="icon-button" id="closeTraceButton" type="button" aria-label="Close trace inspector">×</button>
+      </div>
+      <div class="trace-content" id="traceContent">
+        <div class="trace-empty"><span aria-hidden="true">⌁</span><strong>Select an event</strong><p>Choose a recent event to inspect its durable trace.</p></div>
+      </div>
+    </aside>
+    <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="Close trace inspector" tabindex="-1"></button>
+  </div>
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+</body>
+</html>

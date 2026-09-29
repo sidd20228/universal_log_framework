@@ -124,6 +124,31 @@ func TestServiceAdmitsProcessesQueriesAndShutsDown(t *testing.T) {
 	}
 	waitForEventCount(t, baseURL, 2)
 
+	dashboardRequest, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/dashboard/summary?tenant_id=demo", nil)
+	dashboardRequest.Header.Set("Authorization", "Bearer "+testToken)
+	dashboardResponse, err := http.DefaultClient.Do(dashboardRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dashboard struct {
+		TenantID string `json:"tenant_id"`
+		Totals   struct {
+			Receipts  int `json:"receipts"`
+			Revisions int `json:"revisions"`
+		} `json:"totals"`
+		Pipeline []struct {
+			Stage string `json:"stage"`
+		} `json:"pipeline"`
+	}
+	decodeErr := json.NewDecoder(dashboardResponse.Body).Decode(&dashboard)
+	dashboardResponse.Body.Close()
+	if dashboardResponse.StatusCode != http.StatusOK || decodeErr != nil || dashboard.TenantID != "demo" || dashboard.Totals.Receipts != 2 || dashboard.Totals.Revisions != 2 || len(dashboard.Pipeline) != 5 {
+		t.Fatalf("dashboard status=%d value=%+v decode=%v", dashboardResponse.StatusCode, dashboard, decodeErr)
+	}
+
+	// Close pooled client connections so shutdown timing measures the service,
+	// rather than the process-wide test client's keep-alive lifecycle.
+	http.DefaultClient.CloseIdleConnections()
 	cancel()
 	select {
 	case err := <-done:

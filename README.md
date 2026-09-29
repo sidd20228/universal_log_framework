@@ -33,6 +33,12 @@ curl --fail http://127.0.0.1:8080/health/live
 curl --fail http://127.0.0.1:8080/health/ready
 ```
 
+Open `http://127.0.0.1:8080/dashboard/` for the live operations dashboard.
+Enter tenant `demo` and the value of `ULPF_API_TOKEN`; the page then shows
+pipeline totals, activity, interpretation status, recent events, and trace
+metadata. See the [dashboard guide](docs/DASHBOARD.md) for its authorization,
+raw-evidence, and single-deployment boundaries.
+
 Admit one JSON occurrence. The body is sent as bytes rather than decoded by
 the HTTP layer:
 
@@ -178,6 +184,10 @@ for measurements on the target host.
 
 - [Operator guide](docs/OPERATIONS.md): startup, health, storage, backup,
   restore, upgrades, failure recovery, and troubleshooting.
+- [Operations dashboard](docs/DASHBOARD.md): live metrics, event trace,
+  authorization, and disconnected behavior.
+- [Expected outcomes](docs/EXPECTED_OUTCOMES.md): evidence-backed status for
+  the requested outcomes a–k and the remaining runtime integration work.
 - [Compose deployment](docs/COMPOSE.md): container startup and security
   settings.
 - [Offline installation](docs/OFFLINE_INSTALL.md): deterministic archive

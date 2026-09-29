@@ -1,0 +1,532 @@
+(() => {
+  "use strict";
+
+  const STORAGE_TENANT = "ulpf.dashboard.tenant";
+  const STORAGE_TOKEN = "ulpf.dashboard.token";
+  const REFRESH_INTERVAL_MS = 10_000;
+  const state = {
+    tenant: "",
+    token: "",
+    connected: false,
+    loading: false,
+    events: [],
+    eventsNewestFirst: true,
+    activity: [],
+    summary: null,
+    selectedRevision: "",
+    refreshController: null,
+    timer: null,
+    previousFocus: null,
+  };
+
+  const element = (id) => document.getElementById(id);
+  const ui = {
+    form: element("connectionForm"), tenant: element("tenantInput"), token: element("tokenInput"),
+    disconnect: element("disconnectButton"), refresh: element("refreshButton"), autoRefresh: element("autoRefresh"),
+    notice: element("notice"), connectionDot: element("connectionDot"), connectionLabel: element("connectionLabel"),
+    connectionDetail: element("connectionDetail"), sidebarTenant: element("sidebarTenant"), lastUpdated: element("lastUpdated"),
+    totalReceipts: element("totalReceipts"), totalRevisions: element("totalRevisions"), rawBytes: element("rawBytes"),
+    healthMetric: element("healthMetric"), healthHint: element("healthHint"), pipelineDot: element("pipelineDot"),
+    pipelineState: element("pipelineState"), pipelineStages: element("pipelineStages"), chart: element("activityChart"),
+    chartSummary: element("chartSummary"), donut: element("statusDonut"), donutTotal: element("donutTotal"),
+    statusList: element("statusList"), eventsBody: element("eventsBody"), eventCount: element("eventCount"), eventScope: element("eventScope"),
+    drawer: element("traceDrawer"), traceContent: element("traceContent"),
+    closeTrace: element("closeTraceButton"), scrim: element("drawerScrim"), announcer: element("announcer"),
+  };
+
+  function getSession(key) {
+    try { return sessionStorage.getItem(key) || ""; } catch (_) { return ""; }
+  }
+
+  function setSession(key, value) {
+    try {
+      if (value) sessionStorage.setItem(key, value);
+      else sessionStorage.removeItem(key);
+    } catch (_) { /* Dashboard remains usable when browser storage is disabled. */ }
+  }
+
+  function announce(message) {
+    ui.announcer.textContent = "";
+    window.setTimeout(() => { ui.announcer.textContent = message; }, 30);
+  }
+
+  function showNotice(message, kind = "") {
+    ui.notice.hidden = !message;
+    ui.notice.textContent = message || "";
+    ui.notice.className = `notice${kind ? ` ${kind}` : ""}`;
+  }
+
+  function setConnection(kind, label, detail) {
+    ui.connectionDot.className = `status-dot ${kind}`;
+    ui.connectionLabel.textContent = label;
+    ui.connectionDetail.textContent = detail;
+  }
+
+  function authHeaders() {
+    return { Accept: "application/json", Authorization: `Bearer ${state.token}` };
+  }
+
+  async function fetchJSON(url, options = {}) {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      ...options,
+      headers: { ...authHeaders(), ...(options.headers || {}) },
+    });
+    const contentType = response.headers.get("content-type") || "";
+    let body = null;
+    if (contentType.includes("application/json")) {
+      try { body = await response.json(); } catch (_) { body = null; }
+    }
+    if (!response.ok) {
+      const error = new Error(body?.message || `Request failed with HTTP ${response.status}`);
+      error.status = response.status;
+      error.code = body?.code || "HTTP_ERROR";
+      error.requestID = body?.request_id || response.headers.get("x-request-id") || "";
+      throw error;
+    }
+    if (body === null) throw new Error("The server returned an invalid JSON response.");
+    return body;
+  }
+
+  async function fetchHealth(signal) {
+    const response = await fetch("/health/ready", { method: "GET", cache: "no-store", credentials: "same-origin", signal });
+    return { ready: response.ok, status: response.status };
+  }
+
+  function numberOrNull(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const parsed = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+
+  function formatCount(value) {
+    const number = numberOrNull(value);
+    return number === null ? "—" : new Intl.NumberFormat().format(number);
+  }
+
+  function formatBytes(value) {
+    let number = numberOrNull(value);
+    if (number === null) return "—";
+    const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+    let unit = 0;
+    while (number >= 1000 && unit < units.length - 1) { number /= 1000; unit += 1; }
+    return `${number >= 10 || unit === 0 ? number.toFixed(0) : number.toFixed(1)} ${units[unit]}`;
+  }
+
+  function formatTime(value, includeDate = true) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat(undefined, {
+      ...(includeDate ? { year: "numeric", month: "2-digit", day: "2-digit" } : {}),
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    }).format(date);
+  }
+
+  function compactHash(value) {
+    if (!value) return "—";
+    return value.length > 18 ? `${value.slice(0, 12)}…${value.slice(-6)}` : value;
+  }
+
+  function totalsOf(summary) {
+    return summary?.totals && typeof summary.totals === "object" ? summary.totals : {};
+  }
+
+  function updateMetrics(summary, health) {
+    const totals = totalsOf(summary);
+    ui.totalReceipts.textContent = formatCount(totals.receipts ?? totals.total_receipts);
+    ui.totalRevisions.textContent = formatCount(totals.revisions ?? totals.processed_revisions);
+    ui.rawBytes.textContent = formatBytes(totals.raw_bytes ?? totals.preserved_raw_bytes);
+    ui.healthMetric.className = health?.ready ? "healthy" : "unhealthy";
+    ui.healthMetric.textContent = health ? (health.ready ? "Healthy" : "Not ready") : "—";
+    ui.healthHint.textContent = health ? (health.ready ? "Readiness check passed" : `Readiness returned HTTP ${health.status}`) : "Readiness unavailable";
+    ui.pipelineDot.className = `status-dot ${health?.ready ? "live" : health ? "error" : "idle"}`;
+    ui.pipelineState.textContent = health?.ready ? "Live" : health ? "Unavailable" : "Waiting";
+  }
+
+  function updatePipeline(summary) {
+    const byStage = new Map();
+    const stages = Array.isArray(summary?.pipeline) ? summary.pipeline : [];
+    stages.forEach((item) => {
+      const key = String(item?.stage || item?.name || "").toLowerCase();
+      if (key) byStage.set(key, item);
+    });
+    ui.pipelineStages.querySelectorAll("li").forEach((node) => {
+      const item = byStage.get(node.dataset.stage);
+      node.classList.remove("ok", "warn", "error");
+      node.querySelector("b").textContent = formatCount(item?.count);
+      if (!item) return;
+      const status = String(item.status || "ok").toLowerCase();
+      node.classList.add(status === "failed" || status === "error" ? "error" : status === "warning" || status === "pending" || status === "attention" ? "warn" : "ok");
+      if (item.detail || item.description) node.querySelector("small").textContent = String(item.detail || item.description);
+    });
+  }
+
+  function statusGroups(summary) {
+    const source = summary?.status_counts && typeof summary.status_counts === "object" ? summary.status_counts : {};
+    let parsed = 0, partial = 0, failed = 0, other = 0;
+    Object.entries(source).forEach(([key, raw]) => {
+      const count = numberOrNull(raw) || 0;
+      const status = key.toUpperCase();
+      if (status === "PARSED" || status === "PROCESSED") parsed += count;
+      else if (status === "PARTIALLY_PARSED" || status === "PARTIAL") partial += count;
+      else if (status.includes("FAIL") || status.includes("ERROR")) failed += count;
+      else other += count;
+    });
+    return { parsed, partial, failed, other };
+  }
+
+  function updateDistribution(summary) {
+    const groups = statusGroups(summary);
+    const values = [groups.parsed, groups.partial, groups.failed, groups.other];
+    const total = values.reduce((sum, value) => sum + value, 0);
+    ui.donutTotal.textContent = total ? formatCount(total) : "—";
+    const labels = ["Parsed", "Partially parsed", "Failed", "Other"];
+    const colors = ["#0a9668", "#e5a20a", "#df3450", "#8ca3b5"];
+    let cursor = 0;
+    const segments = values.map((value, index) => {
+      const start = cursor;
+      cursor += total ? (value / total) * 100 : 0;
+      return `${colors[index]} ${start}% ${cursor}%`;
+    });
+    ui.donut.style.background = total ? `conic-gradient(${segments.join(",")})` : "conic-gradient(#dfe8ee 0 100%)";
+    ui.donut.setAttribute("aria-label", total ? labels.map((label, index) => `${label}: ${values[index]}`).join(", ") : "No status distribution available");
+    [...ui.statusList.children].forEach((item, index) => { item.querySelector("strong").textContent = total ? formatCount(values[index]) : "—"; });
+  }
+
+  function normalizeActivity(summary) {
+    if (!Array.isArray(summary?.activity)) return [];
+    return summary.activity.map((item) => ({
+      label: formatTime(item?.time || item?.bucket || item?.timestamp, false),
+      accepted: numberOrNull(item?.accepted) || 0,
+      committed: numberOrNull(item?.committed) || 0,
+    })).filter((item) => item.label !== "—");
+  }
+
+  function drawActivityChart() {
+    const canvas = ui.chart;
+    const rect = canvas.getBoundingClientRect();
+    const ratio = Math.max(1, window.devicePixelRatio || 1);
+    const width = Math.max(280, Math.floor(rect.width));
+    const height = Math.max(160, Math.floor(rect.height));
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    const context = canvas.getContext("2d");
+    context.scale(ratio, ratio);
+    context.clearRect(0, 0, width, height);
+    const pad = { top: 12, right: 15, bottom: 31, left: 45 };
+    const chartWidth = width - pad.left - pad.right;
+    const chartHeight = height - pad.top - pad.bottom;
+    const maximum = Math.max(1, ...state.activity.flatMap((item) => [item.accepted, item.committed]));
+    context.font = "10px ui-sans-serif, system-ui, sans-serif";
+    context.fillStyle = "#708396";
+    context.strokeStyle = "#e1e8ee";
+    context.lineWidth = 1;
+    for (let step = 0; step <= 4; step += 1) {
+      const y = pad.top + chartHeight - (chartHeight * step / 4);
+      context.beginPath(); context.moveTo(pad.left, y); context.lineTo(width - pad.right, y); context.stroke();
+      const value = Math.round(maximum * step / 4);
+      context.fillText(new Intl.NumberFormat(undefined, { notation: "compact" }).format(value), 2, y + 3);
+    }
+    if (state.activity.length === 0) {
+      context.fillStyle = "#8293a2";
+      context.textAlign = "center";
+      context.fillText("No activity data available", pad.left + chartWidth / 2, pad.top + chartHeight / 2);
+      context.textAlign = "start";
+      return;
+    }
+    const drawLine = (field, color) => {
+      context.beginPath();
+      state.activity.forEach((item, index) => {
+        const x = pad.left + (state.activity.length === 1 ? chartWidth / 2 : chartWidth * index / (state.activity.length - 1));
+        const y = pad.top + chartHeight - chartHeight * item[field] / maximum;
+        if (index === 0) context.moveTo(x, y); else context.lineTo(x, y);
+      });
+      context.strokeStyle = color; context.lineWidth = 2; context.lineJoin = "round"; context.lineCap = "round"; context.stroke();
+    };
+    drawLine("accepted", "#00a88f");
+    drawLine("committed", "#087fbd");
+    context.fillStyle = "#708396";
+    context.textAlign = "center";
+    const indexes = [...new Set([0, Math.floor((state.activity.length - 1) / 2), state.activity.length - 1])];
+    indexes.forEach((index) => {
+      const x = pad.left + (state.activity.length === 1 ? chartWidth / 2 : chartWidth * index / (state.activity.length - 1));
+      context.fillText(state.activity[index].label, x, height - 9);
+    });
+    context.textAlign = "start";
+    const accepted = state.activity.reduce((sum, item) => sum + item.accepted, 0);
+    const committed = state.activity.reduce((sum, item) => sum + item.committed, 0);
+    canvas.setAttribute("aria-label", `Event activity: ${accepted} accepted and ${committed} committed in ${state.activity.length} time buckets`);
+    ui.chartSummary.textContent = `${formatCount(accepted)} accepted and ${formatCount(committed)} committed across ${state.activity.length} time buckets.`;
+  }
+
+  function eventStatusClass(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "PARSED" || value === "PROCESSED") return "parsed";
+    if (value === "PARTIALLY_PARSED" || value === "PARTIAL") return "partial";
+    if (value.includes("FAIL") || value.includes("ERROR")) return "failed";
+    return "";
+  }
+
+  function textCell(row, value, className = "") {
+    const cell = document.createElement("td");
+    cell.textContent = value;
+    if (className) cell.className = className;
+    row.append(cell);
+    return cell;
+  }
+
+  function renderEvents() {
+    ui.eventsBody.replaceChildren();
+    if (state.events.length === 0) {
+      const row = document.createElement("tr"); row.className = "empty-row";
+      const cell = textCell(row, state.connected ? "No events were returned for this tenant." : "Connect to load event metadata.");
+      cell.colSpan = 7; ui.eventsBody.append(row);
+      ui.eventCount.textContent = "0 events shown";
+      return;
+    }
+    const displayed = state.eventsNewestFirst ? state.events : [...state.events].reverse();
+    displayed.forEach((event) => {
+      const row = document.createElement("tr");
+      row.dataset.revision = event.revision_id || "";
+      if (state.selectedRevision === event.revision_id) row.classList.add("selected");
+      textCell(row, formatTime(event.received_at));
+      const source = [event.source_profile_id, event.parser_id].filter(Boolean).join(" / ");
+      textCell(row, source || "Unprofiled");
+      const statusCell = document.createElement("td");
+      const status = document.createElement("span"); status.className = `status-pill ${eventStatusClass(event.status)}`; status.textContent = event.status || "Unknown";
+      statusCell.append(status); row.append(statusCell);
+      textCell(row, event.action || "—");
+      const quality = numberOrNull(event.quality_score);
+      textCell(row, quality === null ? "—" : `${Math.round(quality * 100)}%`);
+      const hash = textCell(row, compactHash(event.raw_sha256), "hash"); hash.title = event.raw_sha256 || "";
+      const action = document.createElement("td");
+      const button = document.createElement("button"); button.type = "button"; button.className = "inspect-button"; button.textContent = "Inspect";
+      button.setAttribute("aria-label", `Inspect event ${event.revision_id || event.receipt_id || "metadata"}`);
+      button.addEventListener("click", () => inspectEvent(event, button));
+      action.append(button); row.append(action); ui.eventsBody.append(row);
+    });
+    ui.eventCount.textContent = `${formatCount(state.events.length)} event${state.events.length === 1 ? "" : "s"} shown`;
+  }
+
+  function detailRow(label, value) {
+    const row = document.createElement("div"); row.className = "kv";
+    const key = document.createElement("span"); key.textContent = label;
+    const data = document.createElement("strong"); data.textContent = value === undefined || value === null || value === "" ? "—" : String(value);
+    row.append(key, data); return row;
+  }
+
+  function traceSection(title, rows, copyValue = "") {
+    const section = document.createElement("section"); section.className = "trace-section";
+    const check = document.createElement("span"); check.className = "trace-check"; check.textContent = "✓"; check.setAttribute("aria-hidden", "true");
+    const heading = document.createElement("h3"); heading.textContent = title;
+    const card = document.createElement("div"); card.className = "trace-card"; rows.forEach((row) => card.append(detailRow(row[0], row[1])));
+    if (copyValue) {
+      const copy = document.createElement("button"); copy.type = "button"; copy.className = "copy-button"; copy.textContent = "Copy identifier";
+      copy.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(copyValue); copy.textContent = "Copied"; announce("Identifier copied"); }
+        catch (_) { copy.textContent = "Copy unavailable"; }
+      });
+      card.append(copy);
+    }
+    section.append(check, heading, card); return section;
+  }
+
+  function renderTrace(event, envelope, receiptResponse) {
+    const receipt = receiptResponse?.receipt || envelope?.receipt || {};
+    const raw = receipt.raw || envelope?.raw || {};
+    const processing = envelope?.processing || {};
+    const parser = processing.parser || receiptResponse?.revisions?.find((item) => item.revision_id === event.revision_id)?.parser || {};
+    const canonical = envelope?.event || {};
+    const provenanceCount = envelope?.provenance && typeof envelope.provenance === "object" ? Object.keys(envelope.provenance).length : 0;
+    const content = document.createDocumentFragment();
+    const warning = document.createElement("p"); warning.className = "trace-warning";
+    warning.textContent = "Raw evidence is not fetched or displayed by the dashboard. Use the authorized raw API only when evidence access is required.";
+    content.append(warning);
+    content.append(traceSection("Durable receipt", [
+      ["Receipt ID", receipt.id || event.receipt_id], ["Tenant", receipt.tenant_id || event.tenant_id],
+      ["Received", formatTime(receipt.received_at || event.received_at)], ["Transport", receipt.transport], ["Listener", receipt.listener_id],
+    ], receipt.id || event.receipt_id));
+    content.append(traceSection("Raw evidence metadata", [
+      ["SHA-256", raw.sha256 || event.raw_sha256], ["Size", formatBytes(raw.size_bytes)],
+      ["Available", raw.available === true ? "Yes" : raw.available === false ? "No" : "—"], ["Encoding", raw.encoding_hint],
+    ]));
+    content.append(traceSection("Processing revision", [
+      ["Revision ID", processing.revision_id || event.revision_id], ["Status", processing.status || event.status],
+      ["Parser", parser.id ? `${parser.id}${parser.version ? ` ${parser.version}` : ""}` : "—"],
+      ["Pipeline", processing.pipeline_version], ["Completed", formatTime(processing.timestamps?.completed_at)],
+      ["Issues", Array.isArray(processing.issues) ? processing.issues.length : "—"],
+    ], processing.revision_id || event.revision_id));
+    content.append(traceSection("Canonical envelope", [
+      ["Schema", envelope?.schema_version], ["Class UID", canonical.class_uid], ["Action", canonical.action || event.action],
+      ["Source IP", canonical.src_ip], ["Destination IP", canonical.dst_ip], ["Provenance fields", provenanceCount],
+      ["Quality score", numberOrNull(envelope?.quality?.score) === null ? "—" : `${Math.round(envelope.quality.score * 100)}%`],
+    ]));
+    ui.traceContent.replaceChildren(content);
+  }
+
+  async function inspectEvent(event, trigger) {
+    if (!event.revision_id || !event.receipt_id || !state.token) return;
+    state.selectedRevision = event.revision_id;
+    state.previousFocus = trigger;
+    renderEvents();
+    ui.drawer.classList.add("open"); ui.scrim.classList.add("open"); ui.drawer.setAttribute("aria-hidden", "false");
+    ui.traceContent.replaceChildren();
+    const loading = document.createElement("p"); loading.className = "trace-loading"; loading.textContent = "Loading trace metadata…"; ui.traceContent.append(loading);
+    ui.closeTrace.focus();
+    try {
+      const [envelope, receipt] = await Promise.all([
+        fetchJSON(`/api/v1/events/${encodeURIComponent(event.revision_id)}`),
+        fetchJSON(`/api/v1/receipts/${encodeURIComponent(event.receipt_id)}`),
+      ]);
+      renderTrace(event, envelope, receipt);
+      announce(`Trace loaded for revision ${event.revision_id}`);
+    } catch (error) {
+      const message = document.createElement("div"); message.className = "trace-error";
+      message.textContent = `Trace metadata could not be loaded: ${describeError(error)}`;
+      ui.traceContent.replaceChildren(message);
+    }
+  }
+
+  function closeTrace() {
+    ui.drawer.classList.remove("open"); ui.scrim.classList.remove("open"); ui.drawer.setAttribute("aria-hidden", "true");
+    const previous = state.previousFocus; state.previousFocus = null;
+    if (previous && document.contains(previous)) previous.focus();
+  }
+
+  function describeError(error) {
+    if (error?.name === "AbortError") return "Request cancelled";
+    const suffix = error?.requestID ? ` (request ${error.requestID})` : "";
+    if (error?.status === 401) return `Token was rejected${suffix}`;
+    if (error?.status === 403) return `Token does not grant access to this tenant${suffix}`;
+    if (error?.status === 404) return `Requested metadata was not found${suffix}`;
+    return `${error?.message || "Request failed"}${suffix}`;
+  }
+
+  function applySummary(summary, health) {
+    state.summary = summary;
+    state.activity = normalizeActivity(summary);
+    updateMetrics(summary, health);
+    updatePipeline(summary);
+    updateDistribution(summary);
+    drawActivityChart();
+    ui.lastUpdated.textContent = formatTime(summary?.generated_at || new Date().toISOString());
+  }
+
+  function resetData() {
+    state.summary = null; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
+    updateMetrics(null, null); updatePipeline(null); updateDistribution(null); drawActivityChart(); renderEvents();
+    ui.lastUpdated.textContent = "—"; ui.eventScope.textContent = "Newest-first summary window";
+  }
+
+  async function refresh({ quiet = false } = {}) {
+    if (!state.tenant || !state.token) return;
+    if (state.refreshController) state.refreshController.abort();
+    const controller = new AbortController(); state.refreshController = controller;
+    state.loading = true;
+    ui.refresh.classList.add("loading"); ui.refresh.disabled = true;
+    const tenant = encodeURIComponent(state.tenant);
+    const jobs = [
+      fetchHealth(controller.signal),
+      fetchJSON(`/api/v1/dashboard/summary?tenant_id=${tenant}`, { signal: controller.signal }),
+      fetchJSON(`/api/v1/events?tenant_id=${tenant}&limit=50`, { signal: controller.signal }),
+    ];
+    const results = await Promise.allSettled(jobs);
+    try {
+      const health = results[0].status === "fulfilled" ? results[0].value : null;
+      const summaryResult = results[1];
+      const eventsResult = results[2];
+      if (summaryResult.status === "rejected" && eventsResult.status === "rejected") {
+        throw summaryResult.reason?.status ? summaryResult.reason : eventsResult.reason;
+      }
+      const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
+      const page = eventsResult.status === "fulfilled" ? eventsResult.value : { items: [] };
+      const recentEvents = Array.isArray(summary?.recent_events) ? summary.recent_events : null;
+      state.connected = true;
+      state.events = recentEvents || (Array.isArray(page.items) ? page.items : []);
+      state.eventsNewestFirst = recentEvents !== null;
+      ui.eventScope.textContent = recentEvents !== null ? "Newest-first summary window" : "Bounded event page fallback";
+      applySummary(summary, health);
+      renderEvents();
+      setConnection(health?.ready ? "live" : "error", health?.ready ? "Connected" : "Connected · not ready", state.tenant);
+      ui.sidebarTenant.textContent = state.tenant;
+      const partial = summaryResult.status === "rejected" || eventsResult.status === "rejected";
+      showNotice(partial ? "Connected, but part of the dashboard data is temporarily unavailable." : "", partial ? "error" : "");
+      if (!quiet) announce(`Dashboard refreshed for tenant ${state.tenant}`);
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        state.connected = false;
+        setConnection("error", "Connection failed", state.tenant || "No tenant");
+        showNotice(describeError(error), "error");
+        announce(`Dashboard refresh failed: ${describeError(error)}`);
+      }
+    } finally {
+      if (state.refreshController === controller) {
+        state.refreshController = null; state.loading = false;
+        ui.refresh.classList.remove("loading"); ui.refresh.disabled = false;
+      }
+    }
+  }
+
+  function scheduleRefresh() {
+    if (state.timer) window.clearInterval(state.timer);
+    state.timer = null;
+    if (ui.autoRefresh.checked) {
+      state.timer = window.setInterval(() => {
+        if (!document.hidden && state.tenant && state.token) refresh({ quiet: true });
+      }, REFRESH_INTERVAL_MS);
+    }
+  }
+
+  function connect(event) {
+    event.preventDefault();
+    if (!ui.form.reportValidity()) return;
+    state.tenant = ui.tenant.value.trim(); state.token = ui.token.value;
+    setSession(STORAGE_TENANT, state.tenant); setSession(STORAGE_TOKEN, state.token);
+    state.events = [];
+    setConnection("idle", "Connecting", state.tenant);
+    showNotice("Loading tenant-scoped pipeline data…");
+    refresh(); scheduleRefresh();
+  }
+
+  function disconnect() {
+    if (state.refreshController) state.refreshController.abort();
+    state.tenant = ""; state.token = ""; state.connected = false;
+    setSession(STORAGE_TENANT, ""); setSession(STORAGE_TOKEN, "");
+    ui.tenant.value = ""; ui.token.value = ""; ui.sidebarTenant.textContent = "No tenant";
+    setConnection("idle", "Not connected", "Enter tenant and token");
+    showNotice("Connection details cleared. Enter a tenant and token to reconnect.");
+    closeTrace(); resetData(); scheduleRefresh(); ui.tenant.focus();
+  }
+
+  ui.form.addEventListener("submit", connect);
+  ui.disconnect.addEventListener("click", disconnect);
+  ui.refresh.addEventListener("click", () => refresh());
+  ui.autoRefresh.addEventListener("change", scheduleRefresh);
+  ui.closeTrace.addEventListener("click", closeTrace);
+  ui.scrim.addEventListener("click", closeTrace);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && ui.drawer.classList.contains("open")) closeTrace();
+    if (event.key === "Tab" && ui.drawer.classList.contains("open")) {
+      const focusable = [...ui.drawer.querySelectorAll("button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])")];
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.tenant && state.token) refresh({ quiet: true }); });
+  window.addEventListener("resize", drawActivityChart, { passive: true });
+
+  ui.tenant.value = getSession(STORAGE_TENANT);
+  ui.token.value = getSession(STORAGE_TOKEN);
+  resetData();
+  if (ui.tenant.value && ui.token.value) {
+    state.tenant = ui.tenant.value; state.token = ui.token.value;
+    setConnection("idle", "Reconnecting", state.tenant);
+    refresh({ quiet: true });
+  }
+  scheduleRefresh();
+})();

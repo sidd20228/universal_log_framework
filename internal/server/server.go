@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/auth"
+	"github.com/sidd20228/universal_log_framework/internal/dashboard"
+	"github.com/sidd20228/universal_log_framework/internal/dashboardapi"
 	"github.com/sidd20228/universal_log_framework/internal/detect"
 	"github.com/sidd20228/universal_log_framework/internal/evidence"
 	"github.com/sidd20228/universal_log_framework/internal/inbox"
@@ -44,13 +46,14 @@ type Config struct {
 }
 
 type Service struct {
-	config  Config
-	inbox   *inbox.SQLiteStore
-	raw     *evidence.Filesystem
-	handler http.Handler
-	workers []*worker.Worker
-	ready   atomic.Bool
-	closed  atomic.Bool
+	config    Config
+	inbox     *inbox.SQLiteStore
+	dashboard *dashboardapi.SQLiteReader
+	raw       *evidence.Filesystem
+	handler   http.Handler
+	workers   []*worker.Worker
+	ready     atomic.Bool
+	closed    atomic.Bool
 }
 
 func New(ctx context.Context, config Config) (*Service, error) {
@@ -86,7 +89,14 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	fail := func(err error) (*Service, error) { queue.Close(); return nil, err }
+	var dashboardReader *dashboardapi.SQLiteReader
+	fail := func(err error) (*Service, error) {
+		if dashboardReader != nil {
+			_ = dashboardReader.Close()
+		}
+		_ = queue.Close()
+		return nil, err
+	}
 	authorizer, err := auth.New([]auth.TokenConfig{{ID: "compose", Actor: "compose-runtime", Secret: config.Token,
 		Scopes: []auth.Scope{auth.ScopeEventsWrite, auth.ScopeEventsRead, auth.ScopeRawRead}, Tenants: []string{config.TenantID}}})
 	if err != nil {
@@ -108,6 +118,14 @@ func New(ctx context.Context, config Config) (*Service, error) {
 	if err != nil {
 		return fail(err)
 	}
+	dashboardReader, err = dashboardapi.NewSQLiteReader(ctx, config.SQLitePath)
+	if err != nil {
+		return fail(err)
+	}
+	dashboardHTTP, err := dashboardapi.NewHTTPHandler(authorizer, config.TenantID, dashboardReader)
+	if err != nil {
+		return fail(err)
+	}
 
 	detector, err := detect.NewDefault()
 	if err != nil {
@@ -126,11 +144,14 @@ func New(ctx context.Context, config Config) (*Service, error) {
 			return fail(err)
 		}
 	}
-	service := &Service{config: config, inbox: queue, raw: raw, workers: workers}
+	service := &Service{config: config, inbox: queue, dashboard: dashboardReader, raw: raw, workers: workers}
 	mux := http.NewServeMux()
 	mux.Handle("/health/live", http.HandlerFunc(service.live))
 	mux.Handle("/health/ready", http.HandlerFunc(service.readiness))
+	mux.Handle("/dashboard", dashboard.Handler())
+	mux.Handle("/dashboard/", dashboard.Handler())
 	mux.Handle("/api/v1/ingest", auth.RequireHTTP(authorizer, auth.ScopeEventsWrite, func(*http.Request) string { return config.TenantID }, admission))
+	mux.Handle("/api/v1/dashboard/summary", dashboardHTTP)
 	mux.Handle("/api/v1/", queries)
 	service.handler = mux
 	return service, nil
@@ -208,7 +229,7 @@ func (service *Service) Close() error {
 		return nil
 	}
 	service.ready.Store(false)
-	return service.inbox.Close()
+	return errors.Join(service.dashboard.Close(), service.inbox.Close())
 }
 
 func (service *Service) live(writer http.ResponseWriter, request *http.Request) {
