@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -49,8 +49,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 20
     needs: [static-and-unit, race]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Require Docker Compose engine
         run: |
           docker info
@@ -75,8 +75,8 @@ jobs:
     timeout-minutes: 30
     needs: compose
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -93,7 +93,7 @@ jobs:
         run: ./scripts/verify-evaluation.sh
       - name: Publish verifier report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: evaluation-${{ github.sha }}
           path: output/evaluation/verification.txt

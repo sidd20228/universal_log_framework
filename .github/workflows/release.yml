@@ -31,10 +31,10 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -132,7 +132,7 @@ jobs:
           ULPF_OFFLINE_EVIDENCE_PATH: dist/offline-clean-install-${{ matrix.arch }}.json
         run: ./scripts/test-offline-install.sh "dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst" release-inputs/signing-public.pem
       - name: Attest offline release provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst
@@ -140,7 +140,7 @@ jobs:
             dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst.signature.json
             dist/ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}.tar.zst.signature.sig
             dist/offline-clean-install-${{ matrix.arch }}.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ulpf-offline-${{ steps.release.outputs.version }}-${{ matrix.arch }}
           path: dist/*
@@ -153,7 +153,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: ulpf-offline-*
           path: dist
