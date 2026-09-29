@@ -665,7 +665,9 @@
     if (displayed.length === 0) {
       const row = document.createElement("tr"); row.className = "empty-row";
       const message = state.events.length ? "No events match the selected filters." : state.connected ? "No events were returned for this tenant." : "Connect to load event metadata.";
-      const cell = textCell(row, message); cell.colSpan = 7; ui.eventsBody.append(row); ui.eventCount.textContent = "0 events shown"; return;
+      const cell = textCell(row, message); cell.colSpan = 7; ui.eventsBody.append(row); ui.eventCount.textContent = "0 events shown";
+      if (focusedRevision) ui.pauseStream.focus({ preventScroll: true });
+      return;
     }
     displayed.forEach((event) => {
       const identity = sourceIdentity(event);
@@ -785,7 +787,7 @@
   function closeTrace(restoreFocus = true) {
     ui.drawer.classList.remove("open"); ui.scrim.classList.remove("open"); ui.drawer.setAttribute("aria-hidden", "true");
     const previous = state.previousFocus; state.previousFocus = null;
-    if (restoreFocus && previous && document.contains(previous)) previous.focus();
+    if (restoreFocus) (previous && document.contains(previous) ? previous : ui.pauseStream).focus({ preventScroll: true });
   }
 
   function describeError(error) {

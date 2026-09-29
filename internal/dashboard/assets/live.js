@@ -135,7 +135,7 @@
       const feed = ui.liveLogFeed, oldHeight = feed.scrollHeight, oldTop = feed.scrollTop;
       const focusedReceipt = feed.contains(document.activeElement) ? document.activeElement.dataset.receipt : null;
       feed.replaceChildren(fragment);
-      if (focusedReceipt) [...feed.querySelectorAll("button")].find((button) => button.dataset.receipt === focusedReceipt)?.focus({ preventScroll: true });
+      if (focusedReceipt) ([...feed.querySelectorAll("button")].find((button) => button.dataset.receipt === focusedReceipt) || ui.consoleFollow).focus({ preventScroll: true });
       if (oldTop > 5) feed.scrollTop = oldTop + feed.scrollHeight - oldHeight;
     }
     function draw(canvas, keys, colors, detail) {
