@@ -432,6 +432,47 @@ func (store *SQLiteStore) GetEnvelope(ctx context.Context, revisionID string) (e
 	return stored, nil
 }
 
+// ListEnvelopes returns committed envelopes in stable receipt/revision order.
+// It is intended for the self-contained SQLite query adapter; production
+// installations use the ClickHouse reader.
+func (store *SQLiteStore) ListEnvelopes(ctx context.Context, tenantID string, afterReceivedAt time.Time, afterReceiptID, afterRevisionID string, limit int) ([]envelopepkg.Envelope, error) {
+	if strings.TrimSpace(tenantID) == "" || limit < 1 || limit > 200 {
+		return nil, errors.New("tenant and envelope page limit from 1 to 200 are required")
+	}
+	rows, err := store.db.QueryContext(ctx, `SELECT revisions.envelope_json FROM revisions
+JOIN receipts ON receipts.receipt_id = revisions.receipt_id
+WHERE revisions.envelope_json IS NOT NULL AND receipts.tenant_id = ?
+  AND (receipts.received_at_ns > ? OR
+       (receipts.received_at_ns = ? AND receipts.receipt_id > ?) OR
+       (receipts.received_at_ns = ? AND receipts.receipt_id = ? AND revisions.revision_id > ?))
+ORDER BY receipts.received_at_ns, receipts.receipt_id, revisions.revision_id LIMIT ?`,
+		tenantID, afterReceivedAt.UnixNano(), afterReceivedAt.UnixNano(), afterReceiptID,
+		afterReceivedAt.UnixNano(), afterReceiptID, afterRevisionID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list revision envelopes: %w", err)
+	}
+	defer rows.Close()
+	values := make([]envelopepkg.Envelope, 0)
+	for rows.Next() {
+		var body string
+		if err := rows.Scan(&body); err != nil {
+			return nil, fmt.Errorf("scan revision envelope: %w", err)
+		}
+		var value envelopepkg.Envelope
+		if err := json.Unmarshal([]byte(body), &value); err != nil {
+			return nil, fmt.Errorf("decode revision envelope: %w", err)
+		}
+		if err := value.Validate(); err != nil {
+			return nil, fmt.Errorf("validate stored revision envelope: %w", err)
+		}
+		values = append(values, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate revision envelopes: %w", err)
+	}
+	return values, nil
+}
+
 // ListRevisions returns the immutable revisions for one receipt in commit
 // order. An unknown receipt and a receipt with no revisions both return an
 // empty slice; callers that need to distinguish those cases must GetReceipt

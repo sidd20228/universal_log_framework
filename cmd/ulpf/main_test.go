@@ -66,3 +66,21 @@ func TestValidateConfigCommandRejectsInvalidConfig(t *testing.T) {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
+
+func TestLoadAPITokenFromFileAndRejectsAmbiguousSources(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "api-token")
+	secret := "file-token-00000000000000000000001"
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ULPF_API_TOKEN", "")
+	os.Unsetenv("ULPF_API_TOKEN")
+	got, err := loadAPIToken(path)
+	if err != nil || got != secret {
+		t.Fatalf("loadAPIToken() = %q, %v", got, err)
+	}
+	t.Setenv("ULPF_API_TOKEN", "environment-token-000000000000001")
+	if _, err := loadAPIToken(path); err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("ambiguous secret error = %v", err)
+	}
+}
