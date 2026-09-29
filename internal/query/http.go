@@ -161,13 +161,19 @@ func (service *httpService) getEvent(writer http.ResponseWriter, request *http.R
 		writeError(writer, request, http.StatusNotFound, "NOT_FOUND", "event was not found")
 		return
 	}
-	value, err := service.events.GetEvent(request.Context(), record.Receipt.TenantID, revisionID)
+	// The dashboard sees the durable commit before asynchronous indexing. Read
+	// that same immutable envelope so trace availability is independent of the
+	// search index. Only legacy metadata-only revisions need the index fallback.
+	value, err := service.receipts.GetEnvelope(request.Context(), revisionID)
+	if errors.Is(err, inbox.ErrEnvelopeUnavailable) {
+		value, err = service.events.GetEvent(request.Context(), record.Receipt.TenantID, revisionID)
+	}
 	if err != nil {
 		service.writeStoreError(writer, request, err)
 		return
 	}
 	if value.Receipt.TenantID != record.Receipt.TenantID || value.Receipt.ID != record.Receipt.ID || value.Processing.RevisionID != revisionID {
-		writeError(writer, request, http.StatusInternalServerError, "QUERY_INVARIANT_FAILED", "indexed event trace does not match durable metadata")
+		writeError(writer, request, http.StatusInternalServerError, "QUERY_INVARIANT_FAILED", "event trace does not match durable metadata")
 		return
 	}
 	writeJSON(writer, http.StatusOK, value)

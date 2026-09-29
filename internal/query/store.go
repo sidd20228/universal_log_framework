@@ -28,6 +28,7 @@ var (
 type ReceiptReader interface {
 	GetReceipt(context.Context, string) (inbox.Record, error)
 	GetRevision(context.Context, string) (model.Revision, error)
+	GetEnvelope(context.Context, string) (envelope.Envelope, error)
 	ListRevisions(context.Context, string) ([]model.Revision, error)
 }
 

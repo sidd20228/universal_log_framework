@@ -143,8 +143,12 @@ event's environment and instance origin, and reports unavailable or stale
 nodes explicitly. Cross-node trace requests use a same-origin server proxy;
 peer endpoints and credentials remain in server configuration and are never
 returned to the browser. The browser receives only same-origin trace paths.
-Delivery totals come from the durable per-connector queue. Event-list and
-trace APIs may use ClickHouse when it is selected as the runtime query backend.
+Delivery totals come from the durable per-connector queue. Event-list queries
+may use ClickHouse. Trace requests read the committed envelope directly from
+durable storage, so a newly displayed revision can be inspected before indexing
+finishes. If a trace request fails, **Retry trace** reloads the selected event
+without changing the stream filters. Legacy metadata-only revisions retain an
+event-reader fallback.
 
 The coordinator retains one successful summary per configured peer in memory.
 If that peer stops or times out, its last totals and recent metadata remain in

@@ -167,7 +167,7 @@ func TestRestartConnectorDeadLetterReplayAndTenantIsolation(t *testing.T) {
 	}
 }
 
-func TestParserFaultsRemainDurableAndInvisibleToEventQueries(t *testing.T) {
+func TestParserFaultsRemainDurableAndTraceableBeforeIndexing(t *testing.T) {
 	tests := []struct {
 		name       string
 		parser     interpret.SyntaxParser
@@ -229,8 +229,16 @@ func TestParserFaultsRemainDurableAndInvisibleToEventQueries(t *testing.T) {
 				t.Fatalf("raw without raw scope: status=%d body=%s", response.Code, response.Body.String())
 			}
 			response = queryRequest(t, handler, tenantASecret, "/api/v1/events/"+step.RevisionID)
-			if response.Code != http.StatusNotFound {
-				t.Fatalf("undelivered error became event-visible: status=%d body=%s", response.Code, response.Body.String())
+			var trace envelope.Envelope
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &trace) != nil || trace.Processing.Status != model.StatusError || len(trace.Processing.Issues) != 1 || trace.Processing.Issues[0].Code != test.wantCode {
+				t.Fatalf("committed fault trace unavailable: status=%d body=%s", response.Code, response.Body.String())
+			}
+			response = queryRequest(t, handler, tenantASecret, "/api/v1/events?tenant_id=tenant-a")
+			var page struct {
+				Items []query.EventSummary `json:"items"`
+			}
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Items) != 0 {
+				t.Fatalf("undelivered fault appeared in the search index: status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
 	}

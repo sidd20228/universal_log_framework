@@ -21,6 +21,8 @@ import (
 	"github.com/sidd20228/universal_log_framework/internal/envelope"
 	"github.com/sidd20228/universal_log_framework/internal/evidence"
 	"github.com/sidd20228/universal_log_framework/internal/inbox"
+	"github.com/sidd20228/universal_log_framework/internal/interpret"
+	"github.com/sidd20228/universal_log_framework/internal/interpret/mapping"
 	"github.com/sidd20228/universal_log_framework/internal/model"
 )
 
@@ -172,8 +174,20 @@ func (fixture *queryFixture) addOccurrence(t *testing.T, receiptID, revisionID, 
 		MappingVersion: "synthetic/1.0.0", Parser: &model.ParserIdentity{ID: "synthetic", Version: "1.0.0"},
 		Status: model.StatusParsed, Issues: []model.Issue{}, StartedAt: receivedAt.Add(time.Millisecond), CompletedAt: receivedAt.Add(2 * time.Millisecond),
 	}
-	if _, inserted, err := fixture.inbox.CommitRevision(ctx, revision, "query-fixture"); err != nil || !inserted {
-		t.Fatalf("CommitRevision() = inserted %t, error %v", inserted, err)
+	provenance := make(map[string]mapping.Provenance)
+	for _, field := range []string{"class_uid", "class_name", "action"} {
+		provenance["event."+field] = mapping.Provenance{Kind: mapping.ProvenanceNormalized, SourcePath: "fields." + field, RuleID: field, MappingID: "synthetic", MappingVersion: "1.0.0"}
+	}
+	canonical := map[string]any{"class_uid": int64(4001), "class_name": "Network Activity", "action": action}
+	built, err := envelope.Build(envelope.Input{Receipt: receipt, Revision: revision,
+		Document: interpret.ParsedDocument{Format: "json", Fields: canonical},
+		Mapping:  mapping.Result{Event: canonical, Provenance: provenance, RequiredPresent: 3, RequiredTotal: 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, inserted, err := fixture.inbox.CommitEnvelope(ctx, revision, built, "query-fixture", model.StateRevisionCommitted, ""); err != nil || !inserted {
+		t.Fatalf("CommitEnvelope() = inserted %t, error %v", inserted, err)
 	}
 	receipt.State = model.StateRevisionCommitted
 	fixture.payloads[receiptID] = bytes.Clone(payload)
@@ -186,20 +200,7 @@ func (fixture *queryFixture) addOccurrence(t *testing.T, receiptID, revisionID, 
 		RawSHA256: fmt.Sprintf("%x", hash), QualityScore: 1,
 	}
 	fixture.events.items = append(fixture.events.items, summary)
-	fixture.events.envelopes[tenantID+"/"+revisionID] = envelope.Envelope{
-		SchemaVersion: envelope.SchemaVersion,
-		Receipt: envelope.Receipt{
-			ID: receiptID, TenantID: tenantID, ReceivedAt: receivedAt, ListenerID: receipt.ListenerID,
-			Transport: receipt.Transport, Framing: receipt.Framing,
-		},
-		Raw: raw,
-		Processing: envelope.Processing{
-			RevisionID: revisionID, PipelineVersion: revision.PipelineVersion, Parser: revision.Parser,
-			MappingVersion: revision.MappingVersion, Status: revision.Status, Issues: []envelope.Issue{},
-			Timestamps: envelope.ProcessingTimestamps{StartedAt: revision.StartedAt, CompletedAt: revision.CompletedAt},
-		},
-		Event: map[string]any{"action": action}, Quality: envelope.Quality{Score: 1}, Correlation: envelope.Correlation{GroupIDs: []string{}},
-	}
+	fixture.events.envelopes[tenantID+"/"+revisionID] = built
 }
 
 func TestHTTPQueryTracePaginationAndRawEvidence(t *testing.T) {
@@ -346,4 +347,74 @@ func performRequest(t *testing.T, handler http.Handler, method, target, secret s
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	return response
+}
+
+// The summary reads committed revisions before the asynchronous index catches up.
+func TestHTTPTraceAvailableBeforeIndexingAndDuringIndexOutage(t *testing.T) {
+	for _, backendError := range []error{ErrNotFound, ErrBackendUnavailable} {
+		t.Run(backendError.Error(), func(t *testing.T) {
+			fixture := newQueryFixture(t)
+			fixture.events.err = backendError
+			revisionID := "0199a1f0-81b2-7680-89c3-d5c53fe8e001"
+			response := performRequest(t, fixture.handler, http.MethodGet, "/api/v1/events/"+revisionID, eventsASecret)
+			if response.Code != http.StatusOK {
+				t.Fatalf("committed trace unavailable while index lags: status=%d body=%s", response.Code, response.Body.String())
+			}
+			var actual envelope.Envelope
+			if err := json.Unmarshal(response.Body.Bytes(), &actual); err != nil {
+				t.Fatal(err)
+			}
+			if actual.Processing.RevisionID != revisionID || actual.Event["action"] != "deny" || len(actual.Provenance) != 3 || actual.Raw.SHA256 != fixture.receipts[actual.Receipt.ID].Raw.SHA256 {
+				t.Fatalf("durable trace lost canonical fields, provenance or evidence identity: %#v", actual)
+			}
+			for _, missing := range []string{"0199a1f0-81b2-7680-89c3-d5c53fe8e003", "0199a1f0-81b2-7680-89c3-d5c53fe8e099"} {
+				denied := performRequest(t, fixture.handler, http.MethodGet, "/api/v1/events/"+missing, eventsASecret)
+				if denied.Code != http.StatusNotFound {
+					t.Fatalf("foreign or missing revision: status=%d", denied.Code)
+				}
+			}
+		})
+	}
+}
+
+type traceReceiptReader struct {
+	ReceiptReader
+	value envelope.Envelope
+	err   error
+}
+
+func (reader traceReceiptReader) GetEnvelope(context.Context, string) (envelope.Envelope, error) {
+	return reader.value, reader.err
+}
+
+func TestHTTPTraceLegacyFallbackDoesNotMaskStorageOrIdentityErrors(t *testing.T) {
+	fixture := newQueryFixture(t)
+	revisionID := "0199a1f0-81b2-7680-89c3-d5c53fe8e001"
+	authorizer, err := auth.New([]auth.TokenConfig{{ID: "events-a", Actor: "reader-a", Secret: eventsASecret, Scopes: []auth.Scope{auth.ScopeEventsRead}, Tenants: []string{"tenant-a"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := fixture.events.envelopes["tenant-a/"+revisionID]
+	foreign.Receipt.TenantID = "tenant-b"
+	for _, test := range []struct {
+		name   string
+		err    error
+		value  envelope.Envelope
+		status int
+	}{
+		{name: "legacy metadata-only revision", err: inbox.ErrEnvelopeUnavailable, status: http.StatusOK},
+		{name: "durable storage failure", err: errors.New("secret storage detail"), status: http.StatusServiceUnavailable},
+		{name: "mismatched durable identity", value: foreign, status: http.StatusInternalServerError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler, err := NewHTTPHandler(authorizer, traceReceiptReader{ReceiptReader: fixture.inbox, value: test.value, err: test.err}, fixture.events, fixture.evidence)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := performRequest(t, handler, http.MethodGet, "/api/v1/events/"+revisionID, eventsASecret)
+			if response.Code != test.status || strings.Contains(response.Body.String(), "secret storage detail") || strings.Contains(response.Body.String(), "tenant-b") {
+				t.Fatalf("trace status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
 }

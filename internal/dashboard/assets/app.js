@@ -801,7 +801,9 @@
       if (traceTenant !== state.tenant || state.selectedRevision !== event.revision_id || !ui.drawer.classList.contains("open")) return;
       const message = document.createElement("div"); message.className = "trace-error";
       message.textContent = `Trace metadata could not be loaded: ${describeError(error)}`;
-      ui.traceContent.replaceChildren(message);
+      const retry = document.createElement("button"); retry.type = "button"; retry.className = "copy-button"; retry.textContent = "Retry trace";
+      retry.addEventListener("click", () => inspectEvent(event, trigger));
+      ui.traceContent.replaceChildren(message, retry);
     }
   }
 
