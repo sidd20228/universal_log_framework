@@ -177,7 +177,7 @@
       const ticks = width > 450 ? 6 : 3;
       for (let i = 0; i <= ticks; i++) {
         const px = left + (right - left) * i / ticks;
-        const stamp = new Date(oldest + 120_000 * i / ticks).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+        const stamp = new Date(oldest + 120_000 * i / ticks).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
         ctx.strokeStyle = "#e7ede9"; ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
         ctx.textAlign = i === 0 ? "left" : i === ticks ? "right" : "center";
         ctx.fillText(stamp, px, height - 5);
