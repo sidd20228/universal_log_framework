@@ -61,6 +61,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes zstd
+      - name: Prepare release paths
+        run: mkdir -p reports release-inputs dist
       - name: Build native ULPF image
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -92,7 +94,6 @@ jobs:
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
-          mkdir -p release-inputs dist
           docker save --output "release-inputs/ulpf-${{ matrix.arch }}.tar" "ulpf:$VERSION"
           docker pull --platform "linux/${{ matrix.arch }}" clickhouse/clickhouse-server:25.3.8.23-alpine
           docker save --output "release-inputs/clickhouse-${{ matrix.arch }}.tar" clickhouse/clickhouse-server:25.3.8.23-alpine
