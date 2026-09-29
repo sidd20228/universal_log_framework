@@ -1,6 +1,6 @@
 {
-  "architecture": "arm64",
-  "archive_sha256": "86d3fda6eabddff28e0a4612325285f5ecea3233c5e3db929b5eae820c6e3c11",
+  "architecture": "amd64",
+  "archive_sha256": "0fc2c348bb4005ed8d0681c0c76e74c4655b7771699643178bc1b2849869ec3c",
   "checks": {
     "dashboard": true,
     "ingest": true,
@@ -14,13 +14,13 @@
     "container_egress_denied": true,
     "pull_policy_never": true
   },
-  "finished_at": "2026-09-29T14:26:42Z",
+  "finished_at": "2026-09-29T14:35:58Z",
   "image_ids": [
-    "sha256:61358f18ed77ab09b7207150a3aae83240ab34f394b9f0258b01e2df4017bf2c",
-    "sha256:7034a5e31d07c4cbed180b0cc3353f7c3feb5b73b5ed519564f855d4e7bd0658"
+    "sha256:7c81ad239fd2ce5cf3a295ca280c30214a445d7ad4d6dcc51c8bde000fa231dd",
+    "sha256:a3ab3e0dcf01ce0eb3eeed68842f7686ee5ac31dc15fdeb6d4dcab4d6cfb6204"
   ],
-  "receipt_id": "01a0ed8f-741d-717a-8f96-be2e6b38a4a6",
+  "receipt_id": "01a0ed97-eea3-7ff2-a6e1-1408aca36228",
   "release_version": "0.1.0-rc.6",
   "source_commit": "a0eab50c53a1b266b8940ea037a7c4cfeae56da8",
-  "started_at": "2026-09-29T14:26:10Z"
+  "started_at": "2026-09-29T14:35:24Z"
 }

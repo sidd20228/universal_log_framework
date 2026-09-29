@@ -143,7 +143,24 @@ require_files 'T40 trace document, expected outcomes, and verifier' docs/EVALUAT
 require_files 'T41 dynamic dashboard frontend, API, guide, and design reference' docs/DASHBOARD.md docs/assets/dashboard-concept.png internal/dashboard/handler.go internal/dashboard/assets/index.html internal/dashboard/assets/styles.css internal/dashboard/assets/app.js internal/dashboardapi/summary.go internal/dashboardapi/http.go
 require_files 'T42-T53 completed runtime slices and handbook' docs/PROJECT_HANDBOOK.md internal/bundlecompile/compiler.go internal/reprocess/executor.go internal/deliver/parquet/connector.go internal/analytics/export.go internal/dashboardapi/federated.go scripts/test-offline-install.sh .github/workflows/release.yml
 require_files 'Bundle trust and operational recovery completion' internal/registry/scaffold.go internal/backup/backup.go internal/capacity/disk.go internal/maintenance/maintenance.go internal/server/metrics.go deployments/monitoring/ulpf-alerts.yaml migrations/sqlite/0008_maintenance.sql
-require_files 'Native arm64 offline clean-install evidence' output/evaluation/offline-clean-install-arm64.txt output/evaluation/offline-clean-install-arm64.json
+require_files 'Native amd64 and arm64 offline clean-install evidence' output/evaluation/offline-clean-install-amd64.json output/evaluation/offline-clean-install-arm64.json
+
+if python3 - output/evaluation/offline-clean-install-amd64.json output/evaluation/offline-clean-install-arm64.json <<'PY'
+import json, re, sys
+for expected, path in zip(("amd64", "arm64"), sys.argv[1:]):
+    proof = json.load(open(path, encoding="utf-8"))
+    if proof.get("contract_version") != "ulpf-offline-install-proof/1" or proof.get("architecture") != expected:
+        raise SystemExit(f"invalid {expected} clean-install proof identity")
+    if not re.fullmatch(r"[0-9a-f]{40}", proof.get("source_commit", "")):
+        raise SystemExit(f"invalid {expected} proof source commit")
+    if not proof.get("release_version") or not re.fullmatch(r"[0-9a-f]{64}", proof.get("archive_sha256", "")):
+        raise SystemExit(f"invalid {expected} release identity")
+    if not proof.get("checks") or not all(value is True for value in proof["checks"].values()):
+        raise SystemExit(f"failed {expected} functional check")
+    if not proof.get("controls") or not all(value is True for value in proof["controls"].values()):
+        raise SystemExit(f"failed {expected} offline control")
+PY
+then pass 'Native amd64 and arm64 clean-install proof contracts'; else fail 'Native multi-architecture clean-install evidence'; fi
 
 if command -v pdfinfo >/dev/null 2>&1; then
   pages=$(pdfinfo output/pdf/ULPF-Architecture-Two-Pager.pdf 2>/dev/null | awk '/^Pages:/ {print $2}')
@@ -212,7 +229,6 @@ else
   limit 'No working Docker/Podman daemon: container runtime and Compose health are unverified'
 fi
 
-limit 'The arm64 clean-install proof is complete; native amd64 clean-install evidence requires the release runner'
 limit 'No production-scale, sustained, replicated, multi-node disaster-recovery, or organization-specific retention result is claimed'
 
 log "SUMMARY passes=$passes failures=$failures pending=$pending limits=$limits"

@@ -267,12 +267,12 @@ The current public verification key is versioned at
 [`release/trust/offline-signing-public.pem`](../release/trust/offline-signing-public.pem);
 the matching private key exists only as a GitHub Actions secret.
 
-See [`docs/OFFLINE_INSTALL.md`](OFFLINE_INSTALL.md). A clean local arm64 engine
+See [`docs/OFFLINE_INSTALL.md`](OFFLINE_INSTALL.md). Native amd64 and arm64
+engines in [release run 36581794182](https://github.com/sidd20228/universal_log_framework/actions/runs/36581794182)
 removed the release tags, loaded only the signed archives, verified Docker's
 egress control and a rejected external probe, and passed start, authenticated
-ingest/query/dashboard, and restart persistence with pulls disabled. Native
-amd64 evidence remains required for a multi-architecture air-gapped release
-claim.
+ingest/query/dashboard, and restart persistence with pulls disabled. The
+machine-readable proofs are in `output/evaluation/`.
 
 ## Operations
 
@@ -291,14 +291,14 @@ For this repository's current development machine, the host has 10 CPU cores
 and 16 GiB RAM; Docker has 10 CPUs and about 9.7 GiB RAM. That allocation passed
 the complete unit, race, schema, security, offline-package, and arm64 Compose
 admission-to-ClickHouse-query verification on 2026-09-29. CPU and memory are not
-blocking local development. Free disk is the present constraint: about 46 GiB
+blocking local development. Free disk is the present constraint: about 32 GiB
 remains on a 460 GiB volume, which leaves little room for sustained raw evidence,
 ClickHouse merges, image archives, and Parquet output.
 
 Use an Ubuntu VM for repeatable release and load qualification. A practical
 minimum is 4 vCPU, 16 GiB RAM, and 100 GiB free SSD; use 8 vCPU, 32 GiB RAM, and
 250 GiB or more for sustained ingestion and retention tests. Keep native amd64
-and arm64 runners because the local successful Compose run qualifies arm64 only.
+and arm64 runners so every release continues to prove both packaged architectures.
 
 ## Development and verification
 
@@ -325,7 +325,7 @@ raw preservation, supported parsing, configured taxonomy mapping and lineage,
 signed declarative onboarding, bounded federation,
 SIEM/ClickHouse/NDJSON/Parquet delivery, analytics contracts, disk-aware
 admission, retention with holds, verified local backup/restore, and signed
-container/offline packaging. Native multi-architecture clean-install evidence,
-enterprise HA and offsite disaster recovery, and organization-specific
-capacity qualification require external infrastructure and must not be
-inferred from unit tests on one laptop.
+container/offline packaging, including native Linux amd64/arm64 clean installs.
+Enterprise HA and offsite disaster recovery and organization-specific capacity
+qualification require target infrastructure and must not be inferred from
+single-node tests.
