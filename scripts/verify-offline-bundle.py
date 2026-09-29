@@ -540,8 +540,16 @@ def verify_image_archive(archive, member, relative, architecture, role, version)
     if not isinstance(manifest, list) or len(manifest) != 1 or not isinstance(manifest[0], dict):
         fail(f"container image {role!r} must contain exactly one manifest entry")
     entry = manifest[0]
-    if set(entry) != {"Config", "RepoTags", "Layers"}:
-        fail(f"container image {role!r} manifest entry has missing or unknown fields")
+    required_fields = {"Config", "RepoTags", "Layers"}
+    allowed_fields = required_fields | {"Parent", "LayerSources"}
+    if not required_fields.issubset(entry) or not set(entry).issubset(allowed_fields):
+        fail(f"container image {role!r} manifest entry has missing or unknown fields: {sorted(entry)}")
+    parent = entry.get("Parent")
+    if parent is not None and (not isinstance(parent, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", parent)):
+        fail(f"container image {role!r} manifest parent is invalid")
+    layer_sources = entry.get("LayerSources")
+    if layer_sources not in (None, {}):
+        fail(f"container image {role!r} uses external layer sources, which are forbidden offline")
     config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
     legacy_config = re.fullmatch(r"([0-9a-f]{64})\.json", config_name) if isinstance(config_name, str) else None
     oci_config = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", config_name) if isinstance(config_name, str) else None

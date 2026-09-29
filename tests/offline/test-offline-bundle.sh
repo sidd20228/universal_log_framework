@@ -45,7 +45,7 @@ def tar_bytes(entries):
             archive.addfile(info, io.BytesIO(body))
     return output.getvalue()
 
-def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False):
+def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False, unknown_field=False):
     layer = tar_bytes([("fixture.txt", f"{name}\n".encode())])
     layer_digest = hashlib.sha256(layer).hexdigest()
     declared_digest = "0" * 64 if bad_diff_id else layer_digest
@@ -57,11 +57,15 @@ def image(name, tag, architecture="amd64", omit_layer=False, bad_diff_id=False):
     }, sort_keys=True, separators=(",", ":")).encode()
     config_name = hashlib.sha256(config).hexdigest() + ".json"
     layer_name = f"{layer_digest}/layer.tar"
-    manifest = json.dumps([{
+    manifest_entry = {
         "Config": config_name,
         "RepoTags": [tag],
         "Layers": [layer_name],
-    }], sort_keys=True, separators=(",", ":")).encode()
+        "Parent": "sha256:" + "1" * 64,
+    }
+    if unknown_field:
+        manifest_entry["Unexpected"] = True
+    manifest = json.dumps([manifest_entry], sort_keys=True, separators=(",", ":")).encode()
     entries = [(config_name, config), ("manifest.json", manifest)]
     if not omit_layer:
         entries.append((layer_name, layer))
@@ -73,6 +77,7 @@ image("wrong-arch", "ulpf:1.2.3", architecture="arm64")
 image("wrong-tag", "unrelated:1.2.3")
 image("missing-layer", "ulpf:1.2.3", omit_layer=True)
 image("wrong-layer-digest", "ulpf:1.2.3", bad_diff_id=True)
+image("unknown-manifest-field", "ulpf:1.2.3", unknown_field=True)
 PY
 
 build_bundle() {
@@ -336,5 +341,6 @@ expect_image_rejected wrong-architecture "$fixture/images/wrong-arch.tar"
 expect_image_rejected wrong-tag "$fixture/images/wrong-tag.tar"
 expect_image_rejected missing-layer "$fixture/images/missing-layer.tar"
 expect_image_rejected wrong-layer-digest "$fixture/images/wrong-layer-digest.tar"
+expect_image_rejected unknown-manifest-field "$fixture/images/unknown-manifest-field.tar"
 
 printf '%s\n' 'offline bundle tests passed'
