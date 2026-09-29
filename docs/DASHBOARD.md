@@ -170,6 +170,25 @@ analytics, images, or network calls. This makes the dashboard available in the
 container and in an air-gapped deployment wherever the ULPF API is reachable.
 
 The current design reference is
-[`assets/dashboard-concept-v2.png`](assets/dashboard-concept-v2.png). The shipped UI
-was browser-tested at desktop and mobile widths, including authenticated data,
-empty state, and responsive layout.
+[`assets/dashboard-green-concept.png`](assets/dashboard-green-concept.png).
+See [design and verification notes](DASHBOARD_DESIGN.md) for the visual system,
+interaction checks, and the differences required by real API data.
+
+## Green dashboard controls and motion
+
+The light sidebar links to the simulation, event stream, pipeline, source
+coverage, analytics, and connection settings. Open **Connection** in the top
+bar to change the tenant or token. Search in the top bar or the event table;
+both fields stay synchronized. Press `/` to focus search and Enter to jump to
+results. This shortcut is disabled while a detail pane is open.
+
+**Run simulation** starts the selected source scenario, and becomes **Stop
+simulation** while active. The circular countdown reflects the existing
+three-minute session limit. New receipts, changed counters, and pipeline
+counts animate only when actual data changes. Chart updates have a short
+reveal; keyboard focus or hover exposes the selected measurement. All motion
+respects `prefers-reduced-motion`.
+
+The font (DM Sans and its SIL license) is embedded alongside the application;
+no font service is contacted at runtime. The static handler explicitly serves
+`font/ttf`, including on minimal container images without a MIME database.

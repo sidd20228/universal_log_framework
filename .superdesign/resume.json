@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "/dashboard": {
+      "targetKind": "existing-ui",
+      "projectId": "91842f85-8513-4984-b540-2106b5aae839",
+      "baselineDraftId": "0165d1c6-c670-4363-a7ad-9fb1416c0714",
+      "activeDraftId": "0165d1c6-c670-4363-a7ad-9fb1416c0714",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "27e82fce-ce83-468d-a5a8-8c6d7598f089",
+        "1c003d40-f1ad-42e1-8a5a-30be5f175167"
+      ],
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "internal/dashboard/assets/index.html"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "b0a7f50e1ab89b0716bf8bbf58e6052e1de189ea8a99163ba83a536235c65cc2",
+        "internal/dashboard/assets/index.html": "f49b7b960fee77b7832a773aabf8cbcb84ee8e2dd33d06d4b05eb7383ded7132"
+      },
+      "components": [],
+      "drafts": {
+        "0165d1c6-c670-4363-a7ad-9fb1416c0714": {
+          "title": "ULPF Dashboard Redesign",
+          "visualDirection": "Approved dashboard-green-concept.png: light shell, forest green metrics and simulation, compact live charts and pipeline. Version 1 retains original baseline. Local implementation uses real API data.",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-09-29T19:54:07.808370+00:00"
+    }
+  }
+}

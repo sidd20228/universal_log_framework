@@ -62,6 +62,7 @@
     format: "",
     status: "",
     search: "",
+    seenRevisions: new Set(),
   };
 
   const element = (id) => document.getElementById(id);
@@ -86,6 +87,14 @@
     drawer: element("traceDrawer"), traceContent: element("traceContent"),
     closeTrace: element("closeTraceButton"), scrim: element("drawerScrim"), announcer: element("announcer"),
   };
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function updateValue(node, value) {
+    const previous = node.textContent;
+    node.textContent = value;
+    if (previous !== value && previous !== "—" && value !== "—" && !reducedMotion.matches && node.animate) {
+      node.animate([{ transform: "translateY(3px)", opacity: .5 }, { transform: "translateY(0)", opacity: 1 }], { duration: 380, easing: "cubic-bezier(.16,1,.3,1)" });
+    }
+  }
 
   const live = ULPFLive.mount({
     connection: () => state.connected && Boolean(state.summary) && state.health?.ready,
@@ -129,6 +138,8 @@
     ui.connectionDot.className = `status-dot ${kind}`;
     ui.connectionLabel.textContent = label;
     ui.connectionDetail.textContent = detail;
+    ui.streamState.textContent = state.streamPaused ? "Paused" : state.connected ? "Live" : "Offline";
+    ui.streamState.previousElementSibling.className = `status-dot ${state.connected && !state.streamPaused ? "live" : "idle"}`;
   }
 
   function authHeaders() {
@@ -356,11 +367,11 @@
 
   function updateMetrics(summary, health) {
     const totals = totalsOf(summary);
-    ui.totalReceipts.textContent = formatCount(totals.receipts ?? totals.total_receipts);
-    ui.totalRevisions.textContent = formatCount(totals.revisions ?? totals.processed_revisions);
-    ui.rawBytes.textContent = formatBytes(totals.raw_bytes ?? totals.preserved_raw_bytes);
+    updateValue(ui.totalReceipts, formatCount(totals.receipts ?? totals.total_receipts));
+    updateValue(ui.totalRevisions, formatCount(totals.revisions ?? totals.processed_revisions));
+    updateValue(ui.rawBytes, formatBytes(totals.raw_bytes ?? totals.preserved_raw_bytes));
     ui.healthMetric.className = health?.ready ? "healthy" : "unhealthy";
-    ui.healthMetric.textContent = health ? (health.ready ? "Healthy" : "Not ready") : "—";
+    ui.healthMetric.textContent = health ? (health.ready ? "Ready" : "Not ready") : "—";
     const nodes = Array.isArray(summary?.nodes) ? summary.nodes : [];
     const availableNodes = nodes.filter((node) => node?.available && !node?.stale).length;
     const nodeDetail = nodes.length ? ` · ${availableNodes}/${nodes.length} nodes current` : "";
@@ -379,7 +390,11 @@
     ui.pipelineStages.querySelectorAll(".pipeline-stage").forEach((node) => {
       const item = byStage.get(node.dataset.stage);
       node.classList.remove("ok", "warn", "error");
-      node.querySelector("b").textContent = formatCount(item?.count);
+      const count = node.querySelector("b");
+      if (count.textContent !== formatCount(item?.count) && count.textContent !== "—" && !reducedMotion.matches) {
+        node.querySelector(".stage-num").animate([{ backgroundColor: "#a3dfba", transform: "scale(.9)" }, { backgroundColor: "#e9f3ed", transform: "scale(1)" }], { duration: 600, easing: "cubic-bezier(.16,1,.3,1)" });
+      }
+      updateValue(count, formatCount(item?.count));
       if (!item) return;
       const status = String(item.status || "ok").toLowerCase();
       node.classList.add(status === "failed" || status === "error" ? "error" : status === "warning" || status === "pending" || status === "attention" ? "warn" : "ok");
@@ -488,16 +503,16 @@
     const total = values.reduce((sum, value) => sum + value, 0);
     ui.donutTotal.textContent = total ? formatCount(total) : "—";
     const labels = ["Parsed", "Partially parsed", "Failed", "Other"];
-    const colors = ["#0a9668", "#e5a20a", "#df3450", "#8ca3b5"];
+    const colors = ["#177c50", "#79c49e", "#df6a70", "#abb8b0"];
     let cursor = 0;
     const segments = values.map((value, index) => {
       const start = cursor;
       cursor += total ? (value / total) * 100 : 0;
       return `${colors[index]} ${start}% ${cursor}%`;
     });
-    ui.donut.style.background = total ? `conic-gradient(${segments.join(",")})` : "conic-gradient(#dfe8ee 0 100%)";
+    ui.donut.style.background = total ? `conic-gradient(${segments.join(",")})` : "conic-gradient(#e7ede9 0 100%)";
     ui.donut.setAttribute("aria-label", total ? labels.map((label, index) => `${label}: ${values[index]}`).join(", ") : "No status distribution available");
-    [...ui.statusList.children].forEach((item, index) => { item.querySelector("strong").textContent = total ? formatCount(values[index]) : "—"; });
+    [...ui.statusList.children].forEach((item, index) => { item.querySelector("strong").textContent = total ? formatCount(values[index]) : "—"; item.querySelector("small").textContent = total ? `${Math.round(values[index] / total * 100)}%` : "—"; });
   }
 
   function normalizeActivity(summary) {
@@ -524,9 +539,9 @@
     const chartWidth = width - pad.left - pad.right;
     const chartHeight = height - pad.top - pad.bottom;
     const maximum = Math.max(1, ...state.activity.flatMap((item) => [item.accepted, item.committed]));
-    context.font = "10px ui-sans-serif, system-ui, sans-serif";
-    context.fillStyle = "#708396";
-    context.strokeStyle = "#e1e8ee";
+    context.font = '11px "DM Sans", system-ui, sans-serif';
+    context.fillStyle = "#66766d";
+    context.strokeStyle = "#e7ede9";
     context.lineWidth = 1;
     for (let step = 0; step <= 4; step += 1) {
       const y = pad.top + chartHeight - (chartHeight * step / 4);
@@ -550,9 +565,9 @@
       });
       context.strokeStyle = color; context.lineWidth = 2; context.lineJoin = "round"; context.lineCap = "round"; context.stroke();
     };
-    drawLine("accepted", "#00a88f");
-    drawLine("committed", "#087fbd");
-    context.fillStyle = "#708396";
+    drawLine("accepted", "#177c50");
+    drawLine("committed", "#438981");
+    context.fillStyle = "#66766d";
     context.textAlign = "center";
     const indexes = [...new Set([0, Math.floor((state.activity.length - 1) / 2), state.activity.length - 1])];
     indexes.forEach((index) => {
@@ -614,7 +629,7 @@
     const families = [...new Set(state.events.map((item) => sourceIdentity(item).family))].sort();
     const formats = [...new Set(state.events.map((item) => sourceIdentity(item).format))].sort();
     const statuses = [...new Set(state.events.map((item) => String(item.status || "Unknown")))].sort();
-    replaceFilterOptions(ui.sourceFamilyFilter, families, "All source families", state.sourceFamily);
+    replaceFilterOptions(ui.sourceFamilyFilter, families, "All sources", state.sourceFamily);
     replaceFilterOptions(ui.formatFilter, formats, "All formats", state.format);
     replaceFilterOptions(ui.statusFilter, statuses, "All statuses", state.status);
     state.sourceFamily = ui.sourceFamilyFilter.value; state.format = ui.formatFilter.value; state.status = ui.statusFilter.value;
@@ -660,6 +675,10 @@
   function renderEvents() {
     const focusedRevision = ui.eventsBody.contains(document.activeElement) ? document.activeElement.closest("tr")?.dataset.revision : null;
     const returnRevision = state.previousFocus?.closest("tr")?.dataset.revision;
+    const highlightArrivals = state.seenRevisions.size > 0;
+    const incoming = new Set(state.events.filter((event) => !state.seenRevisions.has(event.revision_id)).map((event) => event.revision_id));
+    state.events.forEach((event) => state.seenRevisions.add(event.revision_id));
+    while (state.seenRevisions.size > 200) state.seenRevisions.delete(state.seenRevisions.values().next().value);
     ui.eventsBody.replaceChildren();
     const displayed = filteredEvents();
     if (displayed.length === 0) {
@@ -672,6 +691,7 @@
     displayed.forEach((event) => {
       const identity = sourceIdentity(event);
       const row = document.createElement("tr"); row.dataset.revision = event.revision_id || "";
+      if (highlightArrivals && incoming.has(event.revision_id)) row.classList.add("new-event");
       if (state.selectedRevision === event.revision_id) row.classList.add("selected");
       textCell(row, formatTime(event.received_at, false));
       const sourceCell = document.createElement("td");
@@ -811,7 +831,9 @@
     live.reset();
     state.summary = null; state.health = null; state.fallbackEvents = []; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
     state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = "";
+    state.seenRevisions.clear();
     ui.eventSearch.value = "";
+    element("globalSearch").value = "";
     ui.sortTime.textContent = "Time ↓";
     replaceSelectOptions(ui.environmentFilter, [], "All environments", "");
     replaceSelectOptions(ui.instanceFilter, [], "All instances", "");
@@ -855,6 +877,7 @@
       applySummary(summary, health);
       if (!summary || !health?.ready) live.unavailable();
       setConnection(health?.ready ? "live" : "error", health?.ready ? "Connected" : "Connected · not ready", state.tenant);
+      if (health?.ready && !quiet) element("connection").open = false;
       ui.sidebarTenant.textContent = state.tenant;
       const partial = summaryResult.status === "rejected" || eventsResult.status === "rejected";
       showNotice(partial ? "Connected, but part of the dashboard data is temporarily unavailable." : "", partial ? "error" : "");
@@ -936,8 +959,10 @@
   ui.sourceFamilyFilter.addEventListener("change", () => { state.sourceFamily = ui.sourceFamilyFilter.value; renderEvents(); renderSourceCoverage(); });
   ui.formatFilter.addEventListener("change", () => { state.format = ui.formatFilter.value; renderEvents(); });
   ui.statusFilter.addEventListener("change", () => { state.status = ui.statusFilter.value; renderEvents(); });
-  ui.eventSearch.addEventListener("input", () => { state.search = ui.eventSearch.value.trim(); renderEvents(); });
-  ui.clearFilters.addEventListener("click", () => { state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = ""; ui.eventSearch.value = ""; populateEventFilters(); renderEvents(); renderSourceCoverage(); announce("Event filters cleared"); });
+  ui.eventSearch.addEventListener("input", () => { state.search = ui.eventSearch.value.trim(); element("globalSearch").value = ui.eventSearch.value; renderEvents(); });
+  element("globalSearch").addEventListener("input", (event) => { state.search = event.target.value.trim(); ui.eventSearch.value = event.target.value; renderEvents(); });
+  element("globalSearch").addEventListener("keydown", (event) => { if (event.key === "Enter") { element("recent").scrollIntoView({ block: "start" }); ui.eventSearch.focus({ preventScroll: true }); } });
+  ui.clearFilters.addEventListener("click", () => { state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = ""; ui.eventSearch.value = ""; element("globalSearch").value = ""; populateEventFilters(); renderEvents(); renderSourceCoverage(); announce("Event filters cleared"); });
   ui.sortTime.addEventListener("click", () => { state.eventsNewestFirst = !state.eventsNewestFirst; ui.sortTime.textContent = state.eventsNewestFirst ? "Time ↓" : "Time ↑"; renderEvents(); });
   ui.environmentFilter.addEventListener("change", () => { populateScopeFilters(state.summary); applyScope(); });
   ui.instanceFilter.addEventListener("change", applyScope);
@@ -953,6 +978,8 @@
   });
   document.addEventListener("keydown", (event) => {
     const activeDrawer = ui.pipelineDrawer.classList.contains("open") ? ui.pipelineDrawer : ui.drawer.classList.contains("open") ? ui.drawer : null;
+    if (!activeDrawer && event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { event.preventDefault(); element("globalSearch").focus(); }
+    if (event.key === "Escape") element("connection").open = false;
     if (event.key === "Escape" && activeDrawer) {
       if (activeDrawer === ui.pipelineDrawer) closePipelineStage();
       else closeTrace();
@@ -968,9 +995,21 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !state.streamPaused && state.tenant && state.token) refresh({ quiet: true }); });
   window.addEventListener("resize", drawActivityChart, { passive: true });
 
+  document.querySelectorAll(".nav-link").forEach((link) => link.addEventListener("click", () => {
+    document.querySelectorAll(".nav-link").forEach((item) => { item.classList.toggle("active", item === link); item.removeAttribute("aria-current"); });
+    link.setAttribute("aria-current", "location");
+    if (link.hash === "#connection") { element("connection").open = true; ui.tenant.focus(); }
+  }));
+  if (!reducedMotion.matches) {
+    const panels = document.querySelectorAll(".metric-strip article, .command-grid > *, .insights-grid > *, .pipeline-panel");
+    panels.forEach((panel, index) => panel.animate([{ opacity: .3, transform: "translateY(12px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 650, delay: Math.min(index * 45, 270), easing: "cubic-bezier(.16,1,.3,1)" }));
+  }
+  document.fonts.ready.then(drawActivityChart);
+
   ui.tenant.value = getSession(STORAGE_TENANT);
   ui.token.value = getSession(STORAGE_TOKEN);
   resetData();
+  setConnection("idle", "Not connected", "Enter tenant and token");
   if (ui.tenant.value && ui.token.value) {
     state.tenant = ui.tenant.value; state.token = ui.token.value;
     setConnection("idle", "Reconnecting", state.tenant);

@@ -98,8 +98,10 @@
 
   function mount({ ingest, connection, inspect, identity, filter, resume }) {
     const el = (id) => document.getElementById(id);
-    const ui = Object.fromEntries(["simulationStart", "simulationStop", "simulationScenario", "simulationSpeed", "simulationBadge", "simulationMessage", "simulationAccepted", "simulationClock", "liveRateChart", "liveQueueChart", "liveRateDetail", "liveQueueDetail", "liveRateValue", "liveQueueValue", "liveSourceCount", "liveSourceMix", "liveLogFeed", "consoleFollow", "consoleClear", "consoleCount", "consoleState"].map((id) => [id, el(id)]));
+    const ui = Object.fromEntries(["simulationStart", "simulationStop", "simulationScenario", "simulationSpeed", "simulationBadge", "simulationMessage", "simulationAccepted", "simulationClock", "sessionRing", "heroSimulation", "liveRateChart", "liveQueueChart", "liveRateDetail", "liveQueueDetail", "liveRateValue", "liveQueueValue", "liveSourceCount", "liveSourceMix", "liveLogFeed", "consoleFollow", "consoleClear", "consoleCount", "consoleState"].map((id) => [id, el(id)]));
     const telemetry = new Telemetry();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let renderedReceipts = new Set(), clockTimer = null;
     let inputs = [], following = true, scope = "", selected = -1, lastMessage = "Connect to send synthetic logs through this server’s configured HTTP listener. Events are persisted in its configured tenant.";
     const timeText = (time) => new Date(time).toLocaleTimeString([], { hour12: false });
     function controls() {
@@ -108,11 +110,19 @@
       ui.simulationScenario.disabled = simulation.running; ui.simulationSpeed.disabled = simulation.running;
       ui.simulationBadge.textContent = simulation.running ? "Simulation running" : simulation.accepted ? "Session stopped" : "Ready to simulate";
       ui.simulationBadge.classList.toggle("running", simulation.running);
-      ui.simulationMessage.textContent = lastMessage;
+      ui.simulationMessage.textContent = connection() && !simulation.running && !simulation.accepted ? "Ready · inputs persist in this server’s configured HTTP tenant." : lastMessage;
       ui.simulationAccepted.textContent = `${simulation.accepted} accepted`;
-      ui.simulationClock.textContent = simulation.running ? `${Math.max(0, Math.ceil((180_000 - (Date.now() - simulation.started)) / 1000))}s remaining` : "3 minute session";
+      const remaining = simulation.running ? Math.max(0, Math.ceil((180_000 - (Date.now() - simulation.started)) / 1000)) : 180;
+      ui.simulationClock.textContent = `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
+      ui.simulationClock.nextElementSibling.textContent = simulation.running ? "remaining" : "session limit";
+      ui.sessionRing.setAttribute("stroke-dashoffset", String(100 - remaining / 180 * 100));
+      ui.heroSimulation.querySelector("span").textContent = simulation.running ? "Stop simulation" : "Run simulation";
     }
-    const simulation = new Simulation({ send: ingest, onInput(input) { inputs.unshift(input); inputs = inputs.slice(0, 80); renderFeed(); controls(); }, onState(message) { lastMessage = message; controls(); renderFeed(); } });
+    const simulation = new Simulation({ send: ingest, onInput(input) { inputs.unshift(input); inputs = inputs.slice(0, 80); renderFeed(); controls(); }, onState(message) {
+      lastMessage = message; controls(); renderFeed();
+      if (clockTimer) window.clearInterval(clockTimer);
+      clockTimer = simulation.running ? window.setInterval(controls, 1000) : null;
+    } });
     function renderFeed() {
       ui.consoleCount.textContent = `${inputs.length} buffered inputs`;
       ui.consoleState.textContent = following ? simulation.running ? "Following incoming inputs" : "Session idle · retained input history" : simulation.running ? "Console frozen · ingestion continues" : "Console frozen · session stopped";
@@ -121,6 +131,7 @@
       if (!inputs.length) { const li = document.createElement("li"); li.className = "console-empty"; li.textContent = "Start a simulation to watch incoming payloads. All samples are synthetic and are sent through real HTTP ingestion."; fragment.append(li); }
       for (const input of inputs) {
         const li = document.createElement("li"); li.className = "log-line";
+        if (!renderedReceipts.has(input.receipt)) li.classList.add("new-arrival");
         const time = document.createElement("time"); time.dateTime = new Date(input.time).toISOString(); time.textContent = timeText(input.time);
         const source = document.createElement("strong"); source.textContent = input.name;
         const format = document.createElement("span"); format.className = "log-format"; format.textContent = input.format.toUpperCase();
@@ -135,29 +146,43 @@
       const feed = ui.liveLogFeed, oldHeight = feed.scrollHeight, oldTop = feed.scrollTop;
       const focusedReceipt = feed.contains(document.activeElement) ? document.activeElement.dataset.receipt : null;
       feed.replaceChildren(fragment);
+      renderedReceipts = new Set(inputs.map((input) => input.receipt));
       if (focusedReceipt) ([...feed.querySelectorAll("button")].find((button) => button.dataset.receipt === focusedReceipt) || ui.consoleFollow).focus({ preventScroll: true });
       if (oldTop > 5) feed.scrollTop = oldTop + feed.scrollHeight - oldHeight;
     }
     function draw(canvas, keys, colors, detail) {
-      const width = Math.max(220, canvas.getBoundingClientRect().width), height = 155, ratio = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(220, rect.width), height = Math.max(80, rect.height), ratio = window.devicePixelRatio || 1;
       canvas.width = width * ratio; canvas.height = height * ratio;
       const ctx = canvas.getContext("2d"); ctx.scale(ratio, ratio); ctx.clearRect(0, 0, width, height);
       const points = telemetry.points, max = Math.max(1, ...points.flatMap((point) => keys.map((key) => point[key])));
       const left = 32, right = width - 12, top = 12, bottom = height - 25;
-      ctx.font = "10px system-ui"; ctx.fillStyle = "#617185";
-      for (let i = 0; i <= 2; i++) {
-        const y = top + (bottom - top) * i / 2;
-        ctx.strokeStyle = "#e3eaf0"; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
-        ctx.fillText((max * (1 - i / 2)).toFixed(max < 5 ? 1 : 0), 2, y + 3);
+      ctx.font = '11px "DM Sans", system-ui'; ctx.fillStyle = "#66766d";
+      for (let i = 0; i <= 4; i++) {
+        const y = top + (bottom - top) * i / 4;
+        ctx.strokeStyle = "#e7ede9"; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+        ctx.fillText((max * (1 - i / 4)).toFixed(max < 5 ? 1 : 0), 2, y + 3);
       }
       const newest = points.at(-1)?.time || Date.now(), oldest = newest - 120_000;
       const x = (point) => left + (right - left) * (point.time - oldest) / 120_000;
       keys.forEach((key, index) => {
         ctx.beginPath(); ctx.strokeStyle = colors[index]; ctx.lineWidth = 2;
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.setLineDash(index === 1 ? [5, 3] : index === 2 ? [2, 3] : []);
         points.forEach((point, i) => { const px = x(point), py = bottom - (bottom - top) * point[key] / max; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }); ctx.stroke();
-        if (points.length) { const point = points.at(-1); ctx.beginPath(); ctx.arc(x(point), bottom - (bottom - top) * point[key] / max, 2.5, 0, 2 * Math.PI); ctx.fillStyle = colors[index]; ctx.fill(); }
+        ctx.setLineDash([]);
+        if (points.length) { const point = points.at(-1); ctx.beginPath(); ctx.arc(x(point), bottom - (bottom - top) * point[key] / max, 2.7, 0, 2 * Math.PI); ctx.fillStyle = colors[index]; ctx.fill(); }
       });
-      ctx.fillStyle = "#617185"; ctx.fillText("−2 min", left, height - 5); ctx.fillText("now", right - 20, height - 5);
+      ctx.fillStyle = "#66766d";
+      const ticks = width > 450 ? 6 : 3;
+      for (let i = 0; i <= ticks; i++) {
+        const px = left + (right - left) * i / ticks;
+        const stamp = new Date(oldest + 120_000 * i / ticks).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+        ctx.strokeStyle = "#e7ede9"; ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+        ctx.textAlign = i === 0 ? "left" : i === ticks ? "right" : "center";
+        ctx.fillText(stamp, px, height - 5);
+      }
+      ctx.textAlign = "left";
       const point = points[selected] || points.at(-1);
       if (point) {
         if (selected >= 0) { ctx.strokeStyle = "#69788b"; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x(point), top); ctx.lineTo(x(point), bottom); ctx.stroke(); ctx.setLineDash([]); }
@@ -165,10 +190,13 @@
       } else detail.textContent = "Waiting for two valid samples · hover or use arrow keys to explore.";
       canvas.setAttribute("aria-label", `${keys.includes("accepted") ? "Live processing rate" : "Pipeline backlog"}. ${detail.textContent}. Last two minutes; arrow keys inspect samples.`);
     }
-    function charts() {
-      draw(ui.liveRateChart, ["accepted", "processed", "delivered"], ["#0b8f82", "#1577a8", "#965eae"], ui.liveRateDetail);
-      draw(ui.liveQueueChart, ["pending", "failed"], ["#b66a0b", "#bd3c42"], ui.liveQueueDetail);
+    function charts(animate = false) {
+      draw(ui.liveRateChart, ["accepted", "processed", "delivered"], ["#177c50", "#438981", "#6f9887"], ui.liveRateDetail);
+      draw(ui.liveQueueChart, ["pending", "failed"], ["#996515", "#bc4c50"], ui.liveQueueDetail);
       const point = telemetry.points.at(-1);
+      if (animate === true && point && (point.accepted || point.processed || point.delivered || point.pending || point.failed) && !reducedMotion.matches) {
+        for (const canvas of [ui.liveRateChart, ui.liveQueueChart]) canvas.animate([{ clipPath: "inset(0 3% 0 0)" }, { clipPath: "inset(0 0 0 0)" }], { duration: 500, easing: "cubic-bezier(.16,1,.3,1)" });
+      }
       ui.liveRateValue.textContent = point ? `${point.accepted.toFixed(1)} events/s` : "— events/s";
       ui.liveQueueValue.textContent = point ? `${point.pending} pending` : "— pending";
     }
@@ -185,12 +213,18 @@
         const label = document.createElement("span"); label.textContent = family;
         const meter = document.createElement("meter"); meter.min = 0; meter.max = events.length; meter.value = count; meter.setAttribute("aria-hidden", "true");
         const number = document.createElement("strong"); number.textContent = `${count}`;
-        button.append(label, meter, number); button.addEventListener("click", () => filter(family)); ui.liveSourceMix.append(button);
+        const percent = document.createElement("small"); percent.textContent = `${Math.round(count / events.length * 100)}%`;
+        button.append(label, meter, number, percent); button.addEventListener("click", () => filter(family)); ui.liveSourceMix.append(button);
         if (focused === family) button.focus({ preventScroll: true });
       }
     }
     ui.simulationStart.addEventListener("click", () => { if (!connection()) return; resume(); simulation.start(ui.simulationScenario.value, ui.simulationSpeed.value); ui.simulationStop.focus(); });
     ui.simulationStop.addEventListener("click", () => { simulation.stop("Stopped. An in-flight input may still finish; accepted events remain stored."); ui.simulationStart.focus(); });
+    ui.heroSimulation.addEventListener("click", () => {
+      if (simulation.running) ui.simulationStop.click();
+      else if (connection()) { ui.simulationStart.click(); el("simulation").scrollIntoView({ block: "nearest" }); }
+      else { el("connection").open = true; el("tenantInput").focus(); }
+    });
     ui.consoleFollow.addEventListener("click", () => { following = !following; ui.consoleFollow.textContent = following ? "Freeze console" : "Follow live"; ui.consoleFollow.setAttribute("aria-pressed", String(following)); renderFeed(); });
     ui.consoleClear.addEventListener("click", () => { inputs = []; following = true; ui.consoleFollow.textContent = "Freeze console"; ui.consoleFollow.setAttribute("aria-pressed", "true"); renderFeed(); });
     for (const canvas of [ui.liveRateChart, ui.liveQueueChart]) {
@@ -199,6 +233,7 @@
       canvas.addEventListener("keydown", (event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const end = telemetry.points.length - 1; selected = event.key === "Home" ? 0 : event.key === "End" ? end : Math.max(0, Math.min(end, (selected < 0 ? end : selected) + (event.key === "ArrowLeft" ? -1 : 1))); charts(); });
     }
     window.addEventListener("resize", charts, { passive: true });
+    document.fonts.ready.then(() => charts());
     window.addEventListener("pagehide", () => simulation.stop("Session stopped because the page was left."));
     document.addEventListener("visibilitychange", () => { if (document.hidden && simulation.running) simulation.stop("Stopped because the tab became hidden. Start another session when ready."); });
     return {
@@ -208,7 +243,7 @@
         if (takeSample) telemetry.add(totals, Date.now());
         const byReceipt = new Map(events.map((event) => [event.receipt_id, event]));
         inputs.forEach((input) => { if (byReceipt.has(input.receipt)) input.event = byReceipt.get(input.receipt); });
-        charts(); sourceMix(events); renderFeed(); controls();
+        charts(takeSample); sourceMix(events); renderFeed(); controls();
         if (summary && !totals) {
           for (const id of ["liveRateDetail", "liveQueueDetail"]) ui[id].textContent = "Live telemetry unavailable: this scope includes stale or unavailable origins.";
         }

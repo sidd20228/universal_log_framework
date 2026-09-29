@@ -1,3 +1,32 @@
+# Route and API map
+
+## Page routes
+| URL | Source | Layout / role |
+| --- | --- | --- |
+| `/dashboard` | `internal/dashboard/handler.go` | Permanent redirect to `/dashboard/` |
+| `/dashboard/` | `internal/dashboard/assets/index.html` | Complete operator dashboard shell |
+| `/dashboard/index.html` | Same | Same page |
+| `/dashboard/styles.css`, `/dashboard/live.js`, `/dashboard/app.js` | `internal/dashboard/assets/` | Embedded assets, hash query versioning |
+
+Navigation is in-page anchors: `#overview`, `#simulation`, `#recent`, `#pipeline`, `#sources`, `#activity`, `#connection`. `#scope` and `#main-content` are additional section/accessibility targets. There is no client-side router, no separate settings/users/tasks pages, and no frontend root `/` route in these assets. Do not invent unimplemented navigation destinations.
+
+## Existing API contracts
+- Readiness: `GET /health/ready`, no bearer header, status determines readiness.
+- Dashboard summary: `GET /api/v1/dashboard/summary?tenant_id=<encoded tenant>`.
+- Recent event fallback: `GET /api/v1/events?tenant_id=<encoded tenant>&limit=50`.
+- Trace metadata: `GET /api/v1/events/<encoded revision_id>` and `GET /api/v1/receipts/<encoded receipt_id>`; allowlisted same-origin federated event/receipt URLs may be supplied by metadata.
+- Simulation ingestion: `POST /api/v1/ingest`, `Content-Type: application/octet-stream`, payload is synthetic source log. Ingestion tenant is configured by server, not the dashboard tenant selector. Accepted events persist; stopping or clearing console does not remove them.
+- Data requests send `Authorization: Bearer <token>`, `Accept: application/json`, `credentials: same-origin`, `cache: no-store`.
+- Tenant/token persist in current tab sessionStorage under `ulpf.dashboard.tenant` and `ulpf.dashboard.token`; never bake credentials into UI/artifacts.
+- Refresh every 2 seconds while visible, connected and unpaused, with 8-second abort timeout. Summary and fallback event request failures support partial availability.
+- Environment/instance/source/format/status/search filters scope actual returned data. No fake counters, synthetic historical chart samples or invented tenant content.
+- Trace inspector shows receipt, raw-evidence metadata, revision and canonical envelope. It does not fetch/display raw evidence.
+- Simulation scenarios `all`, `security`, `operations`, `endpoint`; speeds `1`, `2`, `4`; three-minute limit; last 80 input previews; stop on page hide, hidden tab, refresh pause or unavailable telemetry.
+
+## Complete dashboard route handler
+Source: `internal/dashboard/handler.go`. Only four asset filenames are served; new asset types require an intentional handler change. CSP restricts scripts/styles/fonts/connects to same origin; do not add CDN dependencies, external fonts, inline scripts or inline style blocks.
+
+```go
 // Package dashboard serves the embedded ULPF operator dashboard.
 package dashboard
 
@@ -26,8 +55,8 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	assetBodies := make(map[string][]byte, 6)
-	for _, name := range []string{"index.html", "styles.css", "live.js", "app.js", "dm-sans.ttf", "FONT-LICENSE.txt"} {
+	assetBodies := make(map[string][]byte, 4)
+	for _, name := range []string{"index.html", "styles.css", "live.js", "app.js"} {
 		body, readErr := fs.ReadFile(assets, name)
 		if readErr != nil {
 			panic(readErr)
@@ -59,6 +88,10 @@ func Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
+		if name != "index.html" && name != "styles.css" && name != "live.js" && name != "app.js" {
+			http.NotFound(writer, request)
+			return
+		}
 		body, found := assetBodies[name]
 		if !found {
 			http.NotFound(writer, request)
@@ -72,10 +105,6 @@ func Handler() http.Handler {
 			return
 		}
 		contentType := mime.TypeByExtension(path.Ext(name))
-		// Minimal container images may have no system MIME database.
-		if name == "dm-sans.ttf" {
-			contentType = "font/ttf"
-		}
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}
@@ -114,3 +143,4 @@ func stringLength(value int) string {
 	}
 	return string(digits[position:])
 }
+```

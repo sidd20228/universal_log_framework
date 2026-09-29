@@ -1,135 +1,1021 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="description" content="Live Universal Log Processing Framework operator dashboard">
-  <title>ULPF · Universal event pipeline</title>
-  <link rel="stylesheet" href="/dashboard/styles.css">
-  <script src="/dashboard/live.js" defer></script>
-  <script src="/dashboard/app.js" defer></script>
-</head>
-<body>
-  <a class="skip-link" href="#main-content">Skip to dashboard</a>
-  <div class="shell">
-    <aside class="sidebar" aria-label="Primary navigation">
-      <a class="brand" href="#overview" aria-label="ULPF dashboard home"><span class="brand-mark" aria-hidden="true">U</span><span><strong>ULPF</strong><small>Event operations</small></span></a>
-      <nav>
-        <a class="nav-link active" href="#overview">Overview</a>
-        <a class="nav-link" href="#simulation">Live simulation</a>
-        <a class="nav-link" href="#recent">Event stream</a>
-        <a class="nav-link" href="#pipeline">Pipeline</a>
-        <a class="nav-link" href="#sources">Sources</a>
-        <a class="nav-link" href="#activity">Analytics</a>
-        <a class="nav-link" href="#connection">Connection</a>
-      </nav>
-      <div class="sidebar-foot"><span class="rail-label">Active tenant</span><strong id="sidebarTenant">No tenant</strong><span>Air-gap ready</span></div>
-    </aside>
-
-    <div class="workspace">
-      <header class="topbar" id="connection">
-        <form id="connectionForm" class="connection-form" autocomplete="off">
-          <label>Tenant<input id="tenantInput" name="tenant" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}" placeholder="demo" spellcheck="false"></label>
-          <label>API token<input id="tokenInput" name="token" type="password" required minlength="32" maxlength="512" placeholder="Stored for this tab" autocomplete="off" spellcheck="false"></label>
-          <button class="button primary" type="submit">Connect</button>
-          <button class="button quiet" id="disconnectButton" type="button">Clear</button>
-        </form>
-        <div class="connection-state" aria-live="polite"><span class="status-dot idle" id="connectionDot" aria-hidden="true"></span><span><strong id="connectionLabel">Not connected</strong><small id="connectionDetail">Enter tenant and token</small></span></div>
-        <button class="button refresh" id="refreshButton" type="button" aria-label="Refresh dashboard data"><span aria-hidden="true">↻</span><span>Refresh</span></button>
-      </header>
-
-      <main id="main-content" tabindex="-1">
-        <section class="hero" id="overview" aria-labelledby="pageTitle">
-          <div><p class="eyebrow">OPERATIONS / LIVE PIPELINE</p><h1 id="pageTitle">Universal event pipeline</h1><p>Raw evidence in. Traceable intelligence out.</p></div>
-          <div class="updated"><span>Last synchronized</span><strong id="lastUpdated">—</strong></div>
-        </section>
-        <div class="notice" id="notice" role="status" aria-live="polite">Connect with a tenant and bearer token to load live event metadata.</div>
-
-        <section class="scope-bar" id="scope" aria-labelledby="scopeTitle">
-          <div><p class="eyebrow">FEDERATED SCOPE</p><h2 id="scopeTitle">Runtime origins</h2><p id="scopeSummary">Connect to load runtime origins.</p></div>
-          <label>Environment<select id="environmentFilter" disabled><option value="">All environments</option></select></label>
-          <label>Instance<select id="instanceFilter" disabled><option value="">All instances</option></select></label>
-          <div class="node-groups" id="nodeGroups" aria-live="polite"><p class="node-empty">Node availability appears after connection.</p></div>
-        </section>
-
-        <section class="metric-strip" aria-label="Pipeline totals">
-          <article><span>Total receipts</span><strong id="totalReceipts">—</strong><small id="receiptHint">durably admitted</small></article>
-          <article><span>Raw preserved</span><strong id="rawBytes">—</strong><small>content-addressed bytes</small></article>
-          <article><span>Processed</span><strong id="totalRevisions">—</strong><small id="revisionHint">immutable revisions</small></article>
-          <article><span>Pipeline health</span><strong id="healthMetric">—</strong><small id="healthHint">Checking readiness</small></article>
-        </section>
-
-        <section class="panel pipeline-panel" id="pipeline" aria-labelledby="pipelineTitle">
-          <div class="section-head"><div><p class="eyebrow">DURABLE FLOW</p><h2 id="pipelineTitle">Five-stage pipeline</h2></div><span class="live-label"><span class="status-dot idle" id="pipelineDot" aria-hidden="true"></span><span id="pipelineState">Waiting</span></span></div>
-          <ol class="pipeline" id="pipelineStages">
-            <li><button class="pipeline-stage" data-stage="frame" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">01</span><span><strong>Frame</strong><small>Transport boundaries</small></span><b>—</b></button></li>
-            <li><button class="pipeline-stage" data-stage="admit" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">02</span><span><strong>Admit</strong><small>Durable receipt</small></span><b>—</b></button></li>
-            <li><button class="pipeline-stage" data-stage="interpret" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">03</span><span><strong>Interpret</strong><small>Detect and parse</small></span><b>—</b></button></li>
-            <li><button class="pipeline-stage" data-stage="commit" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">04</span><span><strong>Commit</strong><small>Immutable revision</small></span><b>—</b></button></li>
-            <li><button class="pipeline-stage" data-stage="deliver" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">05</span><span><strong>Deliver</strong><small>SIEM / data lake</small></span><b>—</b></button></li>
-          </ol>
-        </section>
-
-        <section class="simulation-panel" id="simulation" aria-labelledby="simulationTitle">
-          <div class="simulation-intro"><div><h2 id="simulationTitle">Bring the pipeline to life</h2><p>14 sample sources. 7 formats. Real ingestion, receipts and processing.</p></div><span class="simulation-badge" id="simulationBadge">Ready to simulate</span></div>
-          <div class="simulation-controls">
-            <label>Source scenario<select id="simulationScenario"><option value="all">Enterprise mix · all sources</option><option value="security">Network &amp; identity</option><option value="operations">Cloud &amp; operations</option><option value="endpoint">Endpoint telemetry</option></select></label>
-            <label>Target pace<select id="simulationSpeed"><option value="1">Steady · 1 event / sec</option><option value="2" selected>Active · 2 events / sec</option><option value="4">Busy · 4 events / sec</option></select></label>
-            <button class="button primary" id="simulationStart" type="button" disabled>Start simulation</button><button class="button" id="simulationStop" type="button" disabled>Stop</button>
-            <div class="simulation-progress"><strong id="simulationAccepted">0 accepted</strong><span id="simulationClock">3 minute session</span></div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="ULPF live event operations dashboard" />
+    <title>ULPF · Universal event pipeline</title>
+    <link
+      rel="preload"
+      href="/dashboard/dm-sans.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/dashboard/styles.css" />
+    <script src="/dashboard/live.js" defer></script>
+    <script src="/dashboard/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to dashboard</a>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <a class="brand" href="#overview" aria-label="ULPF dashboard home"
+          ><svg
+            class="brand-logo"
+            viewBox="0 0 48 52"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m24 3 19 11v24L24 49 5 38V14Z" />
+            <path
+              d="m5 38 28-16v-9L14 24v19m0-19 19-11 10 5M24 32l10-6v12L24 44M24 3l9 5L14 19v13"
+            /></svg
+          ><span
+            ><strong>ULPF</strong
+            ><small>Universal Log<br />Processing Framework</small></span
+          ></a
+        >
+        <nav>
+          <a class="nav-link active" href="#overview"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" /></svg
+            ><span>Overview</span></a
+          ><a class="nav-link" href="#simulation"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m9 5 11 7-11 7Z" /></svg
+            ><span>Live simulation</span></a
+          ><a class="nav-link" href="#recent"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="5" y="3" width="14" height="18" rx="3" />
+              <path d="M9 8h6M9 12h6M9 16h4" /></svg
+            ><span>Event stream</span></a
+          ><a class="nav-link" href="#pipeline"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="2" width="6" height="5" rx="1.5" />
+              <rect x="2" y="17" width="6" height="5" rx="1.5" />
+              <rect x="16" y="17" width="6" height="5" rx="1.5" />
+              <path d="M12 7v5M5 17v-5h14v5" /></svg
+            ><span>Pipeline</span></a
+          ><a class="nav-link" href="#sources"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <ellipse cx="12" cy="5" rx="8" ry="3" />
+              <path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0" /></svg
+            ><span>Sources</span></a
+          ><a class="nav-link" href="#activity"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 20V10h4v10M10 20V5h4v15M16 20V2h4v18" /></svg
+            ><span>Analytics</span></a
+          ><a class="nav-link" href="#connection"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"
+                transform="translate(1 0)"
+              /></svg
+            ><span>Connection</span></a
+          >
+        </nav>
+        <div class="sidebar-foot">
+          <svg
+            class="icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.65"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m12 3 8 3v5c0 5-4 8-8 10-4-2-8-5-8-10V6Z" />
+            <path d="m8 12 3 3 5-6" /></svg
+          ><strong>Air-gap ready</strong><span>One view. Every event.</span>
+          <div class="tenant-tag">
+            <span class="rail-label">Active tenant</span
+            ><strong id="sidebarTenant">No tenant</strong>
           </div>
-          <p id="simulationMessage" class="simulation-message" role="status">Connect to send synthetic logs through this server’s configured HTTP listener. Events are persisted in its configured tenant.</p>
-        </section>
-
-        <section class="telemetry-grid" aria-label="Live telemetry">
-          <article class="panel telemetry-chart"><div class="section-head"><h2>Live processing rate</h2><strong id="liveRateValue">— events/s</strong></div><div class="telemetry-legend"><span class="rate-accepted">Accepted</span><span class="rate-processed">Processed</span><span class="rate-delivered">Deliveries</span></div><canvas id="liveRateChart" tabindex="0" role="img" aria-label="Waiting for live rate samples"></canvas><p id="liveRateDetail" class="chart-summary">Collecting real counter deltas. No historical samples invented.</p></article>
-          <article class="panel telemetry-chart"><div class="section-head"><h2>Pipeline backlog</h2><strong id="liveQueueValue">— pending</strong></div><div class="telemetry-legend"><span class="queue-pending">Pending</span><span class="queue-failed">Failed</span></div><canvas id="liveQueueChart" tabindex="0" role="img" aria-label="Waiting for pipeline backlog samples"></canvas><p id="liveQueueDetail" class="chart-summary">Pending receipts and connector work in the selected runtime scope.</p></article>
-          <article class="panel source-mix-panel"><div class="section-head"><h2>Source mix</h2><span id="liveSourceCount">0 sources</span></div><p class="panel-copy">Current event window · select a bar to filter the stream.</p><div id="liveSourceMix" class="source-mix"><p class="node-empty">Waiting for event metadata.</p></div></article>
-        </section>
-
-        <section class="log-console" aria-labelledby="consoleTitle">
-          <div class="console-head"><div><h2 id="consoleTitle">Incoming simulation logs</h2><p>Generated input → acknowledged receipt → observed processing status</p></div><div class="console-actions"><span id="consoleCount">0 inputs</span><button class="button" id="consoleFollow" type="button" aria-pressed="true">Freeze console</button><button class="button" id="consoleClear" type="button">Clear view</button></div></div>
-          <ol id="liveLogFeed" class="live-log-feed" aria-label="Latest synthetic inputs, newest first"><li class="console-empty">Start a simulation to watch incoming payloads. The event stream below shows actual indexed events from all sources.</li></ol>
-          <div class="console-foot"><span id="consoleState">Waiting for a simulation</span><span>Last 80 inputs · previews only · HTTP transport</span></div>
-        </section>
-
-        <section class="operations-grid">
-          <article class="panel events-panel" id="recent" aria-labelledby="eventsTitle">
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <label class="global-search"
+            ><svg
+              class="icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.65"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" /></svg
+            ><span class="sr-only">Search all event metadata</span
+            ><input
+              id="globalSearch"
+              type="search"
+              placeholder="Search sources, formats, actions…"
+            /><kbd>/</kbd></label
+          >
+          <div class="topbar-actions">
+            <div class="connection-state" aria-live="polite">
+              <span
+                class="status-dot idle"
+                id="connectionDot"
+                aria-hidden="true"
+              ></span
+              ><span
+                ><strong id="connectionLabel">Not connected</strong
+                ><small id="connectionDetail"
+                  >Enter tenant and token</small
+                ></span
+              >
+            </div>
+            <details class="connection-menu" id="connection">
+              <summary class="button">
+                <svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"
+                    transform="translate(1 0)"
+                  /></svg
+                >Connection
+              </summary>
+              <div class="connection-sheet">
+                <h2>Connect your workspace</h2>
+                <p>Tenant-scoped access to your running ULPF instance.</p>
+                <form
+                  id="connectionForm"
+                  class="connection-form"
+                  autocomplete="off"
+                >
+                  <label
+                    >Tenant<input
+                      id="tenantInput"
+                      name="tenant"
+                      required
+                      maxlength="128"
+                      pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,127}"
+                      placeholder="demo"
+                      spellcheck="false"
+                  /></label>
+                  <label
+                    >API token<input
+                      id="tokenInput"
+                      name="token"
+                      type="password"
+                      required
+                      minlength="32"
+                      maxlength="512"
+                      placeholder="Stored for this tab"
+                      autocomplete="off"
+                      spellcheck="false"
+                  /></label>
+                  <button class="button primary" type="submit">Connect</button>
+                  <button
+                    class="button quiet"
+                    id="disconnectButton"
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                </form>
+              </div>
+            </details>
+            <button
+              class="button refresh icon-button"
+              id="refreshButton"
+              type="button"
+              aria-label="Refresh dashboard data"
+            >
+              <svg
+                class="icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 7a9 9 0 1 0 1 10M20 2v6h-6" />
+              </svg>
+            </button>
+          </div>
+        </header>
+        <main id="main-content" tabindex="-1">
+          <section class="hero" id="overview" aria-labelledby="pageTitle">
+            <div>
+              <h1 id="pageTitle">Universal event pipeline</h1>
+              <p>Raw evidence in. Traceable intelligence out.</p>
+            </div>
+            <div class="hero-actions">
+              <div class="updated">
+                <span>Last synchronized</span
+                ><strong id="lastUpdated">—</strong>
+              </div>
+              <button class="button primary" id="heroSimulation" type="button">
+                <svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m9 5 11 7-11 7Z" /></svg
+                ><span>Run simulation</span>
+              </button>
+            </div>
+          </section>
+          <div class="notice" id="notice" role="status" aria-live="polite">
+            Connect with a tenant and bearer token to load live event metadata.
+          </div>
+          <section class="metric-strip" aria-label="Pipeline totals">
+            <article>
+              <div class="metric-label">
+                <span>Total receipts</span
+                ><svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="5" y="3" width="14" height="18" rx="3" />
+                  <path d="M9 8h6M9 12h6M9 16h4" />
+                </svg>
+              </div>
+              <strong id="totalReceipts">—</strong
+              ><small id="receiptHint">durably admitted</small>
+            </article>
+            <article>
+              <div class="metric-label">
+                <span>Raw preserved</span
+                ><svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <ellipse cx="12" cy="5" rx="8" ry="3" />
+                  <path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0" />
+                </svg>
+              </div>
+              <strong id="rawBytes">—</strong
+              ><small>content-addressed bytes</small>
+            </article>
+            <article>
+              <div class="metric-label">
+                <span>Processed</span
+                ><svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m12 3 8 3v5c0 5-4 8-8 10-4-2-8-5-8-10V6Z" />
+                  <path d="m8 12 3 3 5-6" />
+                </svg>
+              </div>
+              <strong id="totalRevisions">—</strong
+              ><small id="revisionHint">immutable revisions</small>
+            </article>
+            <article>
+              <div class="metric-label">
+                <span>Pipeline health</span
+                ><svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2 12h5l3-8 4 16 3-8h5" />
+                </svg>
+              </div>
+              <strong id="healthMetric">—</strong
+              ><small id="healthHint">Checking readiness</small>
+            </article>
+          </section>
+          <div class="command-grid">
+            <article class="panel telemetry-chart rate-panel">
+              <div class="section-head">
+                <h2>Live processing rate</h2>
+                <strong id="liveRateValue">— events/s</strong>
+              </div>
+              <canvas
+                id="liveRateChart"
+                tabindex="0"
+                role="img"
+                aria-label="Waiting for live rate samples"
+              ></canvas>
+              <div class="telemetry-legend">
+                <span class="rate-accepted">Accepted</span
+                ><span class="rate-processed">Processed</span
+                ><span class="rate-delivered">Deliveries</span>
+              </div>
+              <p id="liveRateDetail" class="chart-summary">
+                Collecting real counter deltas. No historical samples invented.
+              </p>
+            </article>
+            <section
+              class="simulation-panel"
+              id="simulation"
+              aria-labelledby="simulationTitle"
+            >
+              <div class="simulation-intro">
+                <div>
+                  <h2 id="simulationTitle">Live simulation</h2>
+                  <p>Synthetic inputs. Real processing.</p>
+                </div>
+                <span class="simulation-badge" id="simulationBadge"
+                  >Ready to simulate</span
+                >
+              </div>
+              <div class="simulation-body">
+                <div class="simulation-controls">
+                  <label
+                    >Source scenario<select id="simulationScenario">
+                      <option value="all">Enterprise mix</option>
+                      <option value="security">Network &amp; identity</option>
+                      <option value="operations">Cloud &amp; operations</option>
+                      <option value="endpoint">Endpoint telemetry</option>
+                    </select></label
+                  >
+                  <label
+                    >Event pace<select id="simulationSpeed">
+                      <option value="1">1 event/s</option>
+                      <option value="2" selected>2 events/s</option>
+                      <option value="4">4 events/s</option>
+                    </select></label
+                  >
+                  <div class="simulation-buttons">
+                    <button
+                      class="button primary"
+                      id="simulationStart"
+                      type="button"
+                      disabled
+                    >
+                      <svg
+                        class="icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.65"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="m9 5 11 7-11 7Z" /></svg
+                      ><span>Start simulation</span></button
+                    ><button
+                      class="button"
+                      id="simulationStop"
+                      type="button"
+                      disabled
+                    >
+                      <span class="stop-mark" aria-hidden="true"></span>Stop
+                    </button>
+                  </div>
+                </div>
+                <div class="session-timer">
+                  <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle cx="60" cy="60" r="51" class="timer-track" />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="51"
+                      class="timer-progress"
+                      id="sessionRing"
+                      pathLength="100"
+                      stroke-dasharray="100"
+                      stroke-dashoffset="0"
+                    />
+                  </svg>
+                  <div>
+                    <strong id="simulationClock">03:00</strong
+                    ><span>session limit</span>
+                  </div>
+                </div>
+              </div>
+              <div class="simulation-progress">
+                <svg
+                  class="icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.65"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="5" y="3" width="14" height="18" rx="3" />
+                  <path d="M9 8h6M9 12h6M9 16h4" /></svg
+                ><strong id="simulationAccepted">0 accepted</strong
+                ><span>14 sources · 7 formats</span>
+              </div>
+              <p
+                id="simulationMessage"
+                class="simulation-message"
+                role="status"
+              >
+                Connect to send synthetic logs. Inputs persist in this server’s
+                configured HTTP tenant.
+              </p>
+            </section>
+          </div>
+          <section class="insights-grid" aria-label="Pipeline insights">
+            <article class="panel source-mix-panel" id="sourceMixPanel">
+              <div class="section-head">
+                <h2>Source mix</h2>
+                <span id="liveSourceCount">0 sources</span>
+              </div>
+              <p class="panel-copy">
+                Current event window · select a bar to filter the stream.
+              </p>
+              <div id="liveSourceMix" class="source-mix">
+                <p class="node-empty">Waiting for event metadata.</p>
+              </div>
+            </article>
+            <article class="panel telemetry-chart">
+              <div class="section-head">
+                <h2>Pipeline backlog</h2>
+                <strong id="liveQueueValue">— pending</strong>
+              </div>
+              <div class="telemetry-legend">
+                <span class="queue-pending">Pending</span
+                ><span class="queue-failed">Failed</span>
+              </div>
+              <canvas
+                id="liveQueueChart"
+                tabindex="0"
+                role="img"
+                aria-label="Waiting for pipeline backlog samples"
+              ></canvas>
+              <p id="liveQueueDetail" class="chart-summary">
+                Pending receipts and connector work in the selected runtime
+                scope.
+              </p>
+            </article>
+            <article
+              class="panel distribution-panel"
+              aria-labelledby="distributionTitle"
+            >
+              <div class="section-head">
+                <div><h2 id="distributionTitle">Processing status</h2></div>
+              </div>
+              <div class="distribution-body">
+                <div
+                  class="donut"
+                  id="statusDonut"
+                  role="img"
+                  aria-label="No status distribution loaded"
+                >
+                  <span
+                    ><strong id="donutTotal">—</strong
+                    ><small>events</small></span
+                  >
+                </div>
+                <ul class="status-list" id="statusList">
+                  <li>
+                    <span class="status-swatch parsed"></span><span>Parsed</span
+                    ><strong>—</strong><small>—</small>
+                  </li>
+                  <li>
+                    <span class="status-swatch partial"></span
+                    ><span>Partially parsed</span><strong>—</strong
+                    ><small>—</small>
+                  </li>
+                  <li>
+                    <span class="status-swatch failed"></span><span>Failed</span
+                    ><strong>—</strong><small>—</small>
+                  </li>
+                  <li>
+                    <span class="status-swatch other"></span><span>Other</span
+                    ><strong>—</strong><small>—</small>
+                  </li>
+                </ul>
+              </div>
+            </article>
+          </section>
+          <section
+            class="panel pipeline-panel"
+            id="pipeline"
+            aria-labelledby="pipelineTitle"
+          >
+            <div class="section-head">
+              <div>
+                <h2 id="pipelineTitle">Event pipeline</h2>
+                <p class="pipeline-caption">From ingestion to delivery</p>
+              </div>
+              <span class="live-label"
+                ><span
+                  class="status-dot idle"
+                  id="pipelineDot"
+                  aria-hidden="true"
+                ></span
+                ><span id="pipelineState">Waiting</span></span
+              >
+            </div>
+            <ol class="pipeline" id="pipelineStages">
+              <li>
+                <button
+                  class="pipeline-stage"
+                  data-stage="frame"
+                  type="button"
+                  aria-controls="pipelineDrawer"
+                  aria-expanded="false"
+                >
+                  <span class="stage-num"
+                    ><svg
+                      class="icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.65"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="5" y="3" width="14" height="18" rx="3" />
+                      <path d="M9 8h6M9 12h6M9 16h4" /></svg></span
+                  ><span
+                    ><strong>Frame</strong
+                    ><small>Transport boundaries</small></span
+                  ><b>—</b>
+                </button>
+              </li>
+              <li>
+                <button
+                  class="pipeline-stage"
+                  data-stage="admit"
+                  type="button"
+                  aria-controls="pipelineDrawer"
+                  aria-expanded="false"
+                >
+                  <span class="stage-num"
+                    ><svg
+                      class="icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.65"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <ellipse cx="12" cy="5" rx="8" ry="3" />
+                      <path
+                        d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"
+                      /></svg></span
+                  ><span
+                    ><strong>Admit</strong><small>Durable receipt</small></span
+                  ><b>—</b>
+                </button>
+              </li>
+              <li>
+                <button
+                  class="pipeline-stage"
+                  data-stage="interpret"
+                  type="button"
+                  aria-controls="pipelineDrawer"
+                  aria-expanded="false"
+                >
+                  <span class="stage-num"
+                    ><svg
+                      class="icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.65"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="10.5" cy="10.5" r="6.5" />
+                      <path d="m16 16 5 5" /></svg></span
+                  ><span
+                    ><strong>Interpret</strong
+                    ><small>Detect and parse</small></span
+                  ><b>—</b>
+                </button>
+              </li>
+              <li>
+                <button
+                  class="pipeline-stage"
+                  data-stage="commit"
+                  type="button"
+                  aria-controls="pipelineDrawer"
+                  aria-expanded="false"
+                >
+                  <span class="stage-num"
+                    ><svg
+                      class="icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.65"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="m12 3 8 3v5c0 5-4 8-8 10-4-2-8-5-8-10V6Z" />
+                      <path d="m8 12 3 3 5-6" /></svg></span
+                  ><span
+                    ><strong>Commit</strong
+                    ><small>Immutable revision</small></span
+                  ><b>—</b>
+                </button>
+              </li>
+              <li>
+                <button
+                  class="pipeline-stage"
+                  data-stage="deliver"
+                  type="button"
+                  aria-controls="pipelineDrawer"
+                  aria-expanded="false"
+                >
+                  <span class="stage-num"
+                    ><svg
+                      class="icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.65"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M6 18 18 6M6 6h12v12" /></svg></span
+                  ><span
+                    ><strong>Deliver</strong
+                    ><small>SIEM / data lake</small></span
+                  ><b>—</b>
+                </button>
+              </li>
+            </ol>
+          </section>
+          <article
+            class="panel events-panel"
+            id="recent"
+            aria-labelledby="eventsTitle"
+          >
             <div class="section-head event-heading">
-              <div><p class="eyebrow">TENANT-SCOPED METADATA</p><h2 id="eventsTitle">Live event stream</h2><p id="eventScope">Newest-first summary window</p></div>
-              <div class="stream-controls"><span class="live-label"><span class="status-dot live" aria-hidden="true"></span><span id="streamState">Live</span></span><button class="button quiet" id="pauseStreamButton" type="button" aria-pressed="false">Pause</button></div>
+              <div>
+                <h2 id="eventsTitle">Live event stream</h2>
+                <p id="eventScope">Newest-first summary window</p>
+              </div>
+              <div class="stream-controls">
+                <span class="live-label"
+                  ><span class="status-dot live" aria-hidden="true"></span
+                  ><span id="streamState">Live</span></span
+                ><button
+                  class="button quiet"
+                  id="pauseStreamButton"
+                  type="button"
+                  aria-pressed="false"
+                >
+                  Pause
+                </button>
+              </div>
             </div>
             <div class="event-filters" aria-label="Event stream filters">
-              <label><span class="sr-only">Search events</span><input id="eventSearch" type="search" placeholder="Search source, format or action"></label>
-              <label><span class="sr-only">Source family</span><select id="sourceFamilyFilter"><option value="">All source families</option></select></label>
-              <label><span class="sr-only">Format</span><select id="formatFilter"><option value="">All formats</option></select></label>
-              <label><span class="sr-only">Status</span><select id="statusFilter"><option value="">All statuses</option></select></label>
-              <button class="button quiet" id="clearFiltersButton" type="button">Reset</button>
+              <label
+                ><span class="sr-only">Search events</span
+                ><input
+                  id="eventSearch"
+                  type="search"
+                  placeholder="Search source, format or action"
+              /></label>
+              <label
+                ><span class="sr-only">Source family</span
+                ><select id="sourceFamilyFilter">
+                  <option value="">All sources</option>
+                </select></label
+              >
+              <label
+                ><span class="sr-only">Format</span
+                ><select id="formatFilter">
+                  <option value="">All formats</option>
+                </select></label
+              >
+              <label
+                ><span class="sr-only">Status</span
+                ><select id="statusFilter">
+                  <option value="">All statuses</option>
+                </select></label
+              >
+              <button
+                class="button quiet"
+                id="clearFiltersButton"
+                type="button"
+              >
+                Reset
+              </button>
             </div>
-            <div class="table-wrap"><table><thead><tr><th><button class="sort-button" id="sortTimeButton" type="button" aria-label="Reverse event time order">Time ↓</button></th><th>Source</th><th>Format</th><th>Transport</th><th>Status</th><th>Action</th><th><span class="sr-only">Inspect</span></th></tr></thead><tbody id="eventsBody"><tr class="empty-row"><td colspan="7">Connect to load event metadata.</td></tr></tbody></table></div>
-            <div class="table-foot"><span id="eventCount">0 events shown</span><span>Raw content stays behind the authorized evidence API.</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>
+                      <button
+                        class="sort-button"
+                        id="sortTimeButton"
+                        type="button"
+                        aria-label="Reverse event time order"
+                      >
+                        Time ↓
+                      </button>
+                    </th>
+                    <th>Source</th>
+                    <th>Format</th>
+                    <th>Transport</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                    <th><span class="sr-only">Inspect</span></th>
+                  </tr>
+                </thead>
+                <tbody id="eventsBody">
+                  <tr class="empty-row">
+                    <td colspan="7">Connect to load event metadata.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-foot">
+              <span id="eventCount">0 events shown</span
+              ><span
+                >Raw content stays behind the authorized evidence API.</span
+              >
+            </div>
           </article>
-
-          <aside class="panel sources-panel" id="sources" aria-labelledby="sourcesTitle">
-            <div class="section-head"><div><p class="eyebrow">CURRENT EVENT WINDOW</p><h2 id="sourcesTitle">Source coverage</h2></div><strong id="sourceCoverageTotal">0</strong></div>
-            <p class="panel-copy" id="sourceCoverageSummary">Connect to inspect source diversity.</p>
-            <div class="source-coverage" id="sourceCoverage"><p class="node-empty">Source families appear here.</p></div>
-            <div class="source-note"><strong>Synthetic compatibility demo</strong><p>Names describe sample input shapes processed by built-in parsers; they are not vendor certification claims.</p></div>
-          </aside>
-        </section>
-
-        <section class="visual-grid" id="activity">
-          <article class="panel chart-panel" aria-labelledby="activityTitle"><div class="section-head"><div><p class="eyebrow">RECENT WINDOW</p><h2 id="activityTitle">Throughput</h2></div><div class="legend" aria-hidden="true"><span><i class="accepted"></i>Accepted</span><span><i class="committed"></i>Committed</span></div></div><div class="canvas-wrap"><canvas id="activityChart" role="img" aria-label="No event activity loaded"></canvas></div><p class="chart-summary" id="chartSummary">Activity data appears after connection.</p></article>
-          <article class="panel distribution-panel" aria-labelledby="distributionTitle"><div class="section-head"><div><p class="eyebrow">NORMALIZATION QUALITY</p><h2 id="distributionTitle">Status distribution</h2></div></div><div class="distribution-body"><div class="donut" id="statusDonut" role="img" aria-label="No status distribution loaded"><span><strong id="donutTotal">—</strong><small>events</small></span></div><ul class="status-list" id="statusList"><li><span class="status-swatch parsed"></span><span>Parsed</span><strong>—</strong></li><li><span class="status-swatch partial"></span><span>Partially parsed</span><strong>—</strong></li><li><span class="status-swatch failed"></span><span>Failed</span><strong>—</strong></li><li><span class="status-swatch other"></span><span>Other</span><strong>—</strong></li></ul></div></article>
-        </section>
-      </main>
+          <section class="log-console" aria-labelledby="consoleTitle">
+            <div class="console-head">
+              <div>
+                <h2 id="consoleTitle">Incoming simulation logs</h2>
+                <p>
+                  Generated input → acknowledged receipt → observed processing
+                  status
+                </p>
+              </div>
+              <div class="console-actions">
+                <span id="consoleCount">0 inputs</span
+                ><button
+                  class="button"
+                  id="consoleFollow"
+                  type="button"
+                  aria-pressed="true"
+                >
+                  Freeze console</button
+                ><button class="button" id="consoleClear" type="button">
+                  Clear view
+                </button>
+              </div>
+            </div>
+            <ol
+              id="liveLogFeed"
+              class="live-log-feed"
+              aria-label="Latest synthetic inputs, newest first"
+            >
+              <li class="console-empty">
+                Start a simulation to watch incoming payloads. The event stream
+                below shows actual indexed events from all sources.
+              </li>
+            </ol>
+            <div class="console-foot">
+              <span id="consoleState">Waiting for a simulation</span
+              ><span>Last 80 inputs · previews only · HTTP transport</span>
+            </div>
+          </section>
+          <section class="scope-bar" id="scope" aria-labelledby="scopeTitle">
+            <div>
+              <h2 id="scopeTitle">Runtime origins</h2>
+              <p id="scopeSummary">Connect to load runtime origins.</p>
+            </div>
+            <label
+              >Environment<select id="environmentFilter" disabled>
+                <option value="">All environments</option>
+              </select></label
+            >
+            <label
+              >Instance<select id="instanceFilter" disabled>
+                <option value="">All instances</option>
+              </select></label
+            >
+            <div class="node-groups" id="nodeGroups" aria-live="polite">
+              <p class="node-empty">
+                Node availability appears after connection.
+              </p>
+            </div>
+          </section>
+          <section
+            class="visual-grid"
+            id="activity"
+            aria-label="Historical activity and source coverage"
+          >
+            <article class="panel chart-panel" aria-labelledby="activityTitle">
+              <div class="section-head">
+                <div><h2 id="activityTitle">Throughput</h2></div>
+                <div class="legend" aria-hidden="true">
+                  <span><i class="accepted"></i>Accepted</span
+                  ><span><i class="committed"></i>Committed</span>
+                </div>
+              </div>
+              <div class="canvas-wrap">
+                <canvas
+                  id="activityChart"
+                  role="img"
+                  aria-label="No event activity loaded"
+                ></canvas>
+              </div>
+              <p class="chart-summary" id="chartSummary">
+                Activity data appears after connection.
+              </p>
+            </article>
+            <aside
+              class="panel sources-panel"
+              id="sources"
+              aria-labelledby="sourcesTitle"
+            >
+              <div class="section-head">
+                <div><h2 id="sourcesTitle">Source coverage</h2></div>
+                <strong id="sourceCoverageTotal">0</strong>
+              </div>
+              <p class="panel-copy" id="sourceCoverageSummary">
+                Connect to inspect source diversity.
+              </p>
+              <div class="source-coverage" id="sourceCoverage">
+                <p class="node-empty">Source families appear here.</p>
+              </div>
+              <div class="source-note">
+                <strong>Synthetic compatibility demo</strong>
+                <p>
+                  Names describe sample input shapes processed by built-in
+                  parsers; they are not vendor certification claims.
+                </p>
+              </div>
+            </aside>
+          </section>
+        </main>
+      </div>
+      <aside
+        class="trace-drawer"
+        id="pipelineDrawer"
+        aria-labelledby="pipelineDetailTitle"
+        aria-hidden="true"
+      >
+        <div class="drawer-head">
+          <div>
+            <h2 id="pipelineDetailTitle">Stage details</h2>
+            <p>Live count, status and processing contract.</p>
+          </div>
+          <button
+            class="icon-button"
+            id="closePipelineButton"
+            type="button"
+            aria-label="Close pipeline stage details"
+          >
+            ×
+          </button>
+        </div>
+        <div class="trace-content" id="pipelineDetail">
+          <div class="trace-empty">
+            <strong>Select a stage</strong>
+            <p>Choose a pipeline stage to inspect its current state.</p>
+          </div>
+        </div>
+      </aside>
+      <aside
+        class="trace-drawer"
+        id="traceDrawer"
+        aria-labelledby="traceTitle"
+        aria-hidden="true"
+      >
+        <div class="drawer-head">
+          <div>
+            <h2 id="traceTitle">Trace inspector</h2>
+            <p>Receipt, evidence and processing metadata.</p>
+          </div>
+          <button
+            class="icon-button"
+            id="closeTraceButton"
+            type="button"
+            aria-label="Close trace inspector"
+          >
+            ×
+          </button>
+        </div>
+        <div class="trace-content" id="traceContent">
+          <div class="trace-empty">
+            <strong>Select an event</strong>
+            <p>Choose a recent event to inspect its durable trace.</p>
+          </div>
+        </div>
+      </aside>
+      <button
+        class="drawer-scrim"
+        id="drawerScrim"
+        type="button"
+        aria-label="Close open detail pane"
+        tabindex="-1"
+      ></button>
     </div>
 
-    <aside class="trace-drawer" id="pipelineDrawer" aria-labelledby="pipelineDetailTitle" aria-hidden="true"><div class="drawer-head"><div><p class="eyebrow">PIPELINE STAGE</p><h2 id="pipelineDetailTitle">Stage details</h2><p>Live count, status and processing contract.</p></div><button class="icon-button" id="closePipelineButton" type="button" aria-label="Close pipeline stage details">×</button></div><div class="trace-content" id="pipelineDetail"><div class="trace-empty"><strong>Select a stage</strong><p>Choose a pipeline stage to inspect its current state.</p></div></div></aside>
-    <aside class="trace-drawer" id="traceDrawer" aria-labelledby="traceTitle" aria-hidden="true"><div class="drawer-head"><div><p class="eyebrow">END-TO-END PROVENANCE</p><h2 id="traceTitle">Trace inspector</h2><p>Receipt, evidence and processing metadata.</p></div><button class="icon-button" id="closeTraceButton" type="button" aria-label="Close trace inspector">×</button></div><div class="trace-content" id="traceContent"><div class="trace-empty"><strong>Select an event</strong><p>Choose a recent event to inspect its durable trace.</p></div></div></aside>
-    <button class="drawer-scrim" id="drawerScrim" type="button" aria-label="Close open detail pane" tabindex="-1"></button>
-  </div>
-  <div class="sr-only" id="announcer" aria-live="polite"></div>
-</body>
+    <div class="sr-only" id="announcer" aria-live="polite"></div>
+  </body>
 </html>

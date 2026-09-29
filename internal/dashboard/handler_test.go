@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,8 @@ func TestHandlerServesEmbeddedDashboard(t *testing.T) {
 		{path: "/dashboard/styles.css", contentType: "text/css", contains: "--navy", cache: "must-revalidate"},
 		{path: "/dashboard/app.js", contentType: "text/javascript", contains: "/api/v1/dashboard/summary", cache: "must-revalidate"},
 		{path: "/dashboard/live.js", contentType: "text/javascript", contains: "class Simulation", cache: "must-revalidate"},
+		{path: "/dashboard/dm-sans.ttf", contentType: "font/ttf", contains: "\x00\x01\x00\x00", cache: "must-revalidate"},
+		{path: "/dashboard/FONT-LICENSE.txt", contentType: "text/plain", contains: "SIL OPEN FONT LICENSE", cache: "must-revalidate"},
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {
@@ -161,8 +164,8 @@ func TestDashboardPipelineStagesOpenDetailPane(t *testing.T) {
 	}
 	markup := string(page)
 	for _, stage := range []string{"frame", "admit", "interpret", "commit", "deliver"} {
-		control := `class="pipeline-stage" data-stage="` + stage + `"`
-		if !strings.Contains(markup, control) {
+		control := `class="pipeline-stage"\s+data-stage="` + stage + `"`
+		if !regexp.MustCompile(control).MatchString(markup) {
 			t.Fatalf("dashboard pipeline is missing interactive %s control", stage)
 		}
 	}
