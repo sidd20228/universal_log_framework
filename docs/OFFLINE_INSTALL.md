@@ -13,6 +13,10 @@ The verifier derives the RSA public-key fingerprint, checks revocation policy,
 validates the signed interval and archive digest, then verifies the detached
 RSA/SHA-256 signature. Provision the trusted public key and revoked-key list
 through a separate authenticated channel; they are not carried in the archive.
+The repository versions its current verification key at
+[`release/trust/offline-signing-public.pem`](../release/trust/offline-signing-public.pem).
+Pin that file through the same authenticated Git source used for the release;
+the matching private key exists only as a GitHub Actions secret.
 
 ## Assemble on a connected build host
 

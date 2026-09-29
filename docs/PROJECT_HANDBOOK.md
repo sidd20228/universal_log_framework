@@ -258,6 +258,9 @@ statement that binds the outer archive digest to a publisher key. Verification
 uses a separately provisioned public key and revocation list, then validates
 image tag, Linux OS, architecture, config digest, layers, Compose references,
 and all checksum layers. Test mode is explicit and cannot approve a release.
+The current public verification key is versioned at
+[`release/trust/offline-signing-public.pem`](../release/trust/offline-signing-public.pem);
+the matching private key exists only as a GitHub Actions secret.
 
 See [`docs/OFFLINE_INSTALL.md`](OFFLINE_INSTALL.md). A clean local arm64 engine
 removed the release tags, loaded only the signed archives, verified Docker's
