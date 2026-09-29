@@ -9,7 +9,7 @@ LDFLAGS := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.buildDate=$(BUILD_DATE)
 
-.PHONY: build benchmark-dataset check fmt fuzz security-smoke test test-race vet clean
+.PHONY: build benchmark-dataset check fmt fuzz security-smoke test test-dashboard test-race vet clean
 
 build:
 	mkdir -p bin
@@ -27,6 +27,11 @@ vet:
 
 test:
 	go test ./...
+
+test-dashboard:
+	node --check internal/dashboard/assets/app.js
+	node --check internal/dashboard/assets/live.js
+	node --test internal/dashboard/live_test.cjs
 
 test-race:
 	go test -race ./...

@@ -3,7 +3,7 @@
 
   const STORAGE_TENANT = "ulpf.dashboard.tenant";
   const STORAGE_TOKEN = "ulpf.dashboard.token";
-  const REFRESH_INTERVAL_MS = 10_000;
+  const REFRESH_INTERVAL_MS = 2_000;
   const PIPELINE_STAGE_DETAILS = Object.freeze({
     frame: {
       title: "Frame",
@@ -86,6 +86,22 @@
     drawer: element("traceDrawer"), traceContent: element("traceContent"),
     closeTrace: element("closeTraceButton"), scrim: element("drawerScrim"), announcer: element("announcer"),
   };
+
+  const live = ULPFLive.mount({
+    connection: () => state.connected && Boolean(state.summary) && state.health?.ready,
+    ingest: (body, signal) => fetchJSON("/api/v1/ingest", { method: "POST", body, signal, headers: { "Content-Type": "application/octet-stream" } }),
+    identity: sourceIdentity,
+    inspect: inspectEvent,
+    resume: () => { if (state.streamPaused) toggleStream(); },
+    filter: (family) => {
+      state.sourceFamily = state.sourceFamily === family ? "" : family;
+      ui.sourceFamilyFilter.value = state.sourceFamily;
+      renderEvents(); renderSourceCoverage();
+      element("recent").scrollIntoView({ block: "start" });
+      ui.sourceFamilyFilter.focus({ preventScroll: true });
+      announce(state.sourceFamily ? `Showing ${family} events` : "Showing all source families");
+    },
+  });
 
   function getSession(key) {
     try { return sessionStorage.getItem(key) || ""; } catch (_) { return ""; }
@@ -323,18 +339,19 @@
       (!environment || origin?.environment_id === environment) && (!instance || origin?.instance_id === instance)));
   }
 
-  function applyScope() {
+  function applyScope(takeSample = false) {
     const view = scopedSummary();
     const environment = ui.environmentFilter.value, instance = ui.instanceFilter.value;
     const labels = [environment, instance].filter(Boolean);
     const scopeLabel = labels.length ? labels.join(" / ") : "All environments and instances";
     state.activity = normalizeActivity(view);
     state.events = Array.isArray(view?.recent_events) ? view.recent_events : state.fallbackEvents;
-    state.eventsNewestFirst = Array.isArray(view?.recent_events);
+    state.events = [...state.events].sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
     populateEventFilters();
     updateMetrics(view, state.health); updatePipeline(view); updateDistribution(view); drawActivityChart(); renderEvents(); renderSourceCoverage(); renderNodeGroups(state.summary);
+    live.update(view, state.events, JSON.stringify([state.tenant, environment, instance]), takeSample === true);
     ui.scopeSummary.textContent = `${scopeLabel} · ${originsOf(view).length || nodesOf(view).length || 0} runtime origin${(originsOf(view).length || nodesOf(view).length) === 1 ? "" : "s"}`;
-    ui.eventScope.textContent = `${scopeLabel} · ${state.eventsNewestFirst ? "newest-first summary window" : "bounded event page fallback"}`;
+    ui.eventScope.textContent = `${scopeLabel} · ${state.eventsNewestFirst ? "newest" : "oldest"} first · refreshes every 2 seconds`;
   }
 
   function updateMetrics(summary, health) {
@@ -641,6 +658,8 @@
   }
 
   function renderEvents() {
+    const focusedRevision = ui.eventsBody.contains(document.activeElement) ? document.activeElement.closest("tr")?.dataset.revision : null;
+    const returnRevision = state.previousFocus?.closest("tr")?.dataset.revision;
     ui.eventsBody.replaceChildren();
     const displayed = filteredEvents();
     if (displayed.length === 0) {
@@ -665,7 +684,10 @@
       const action = document.createElement("td"); const button = document.createElement("button"); button.type = "button"; button.className = "inspect-button"; button.textContent = "Inspect";
       button.setAttribute("aria-label", `Inspect event ${event.revision_id || event.receipt_id || "metadata"}`); button.addEventListener("click", () => inspectEvent(event, button));
       action.append(button); row.append(action); ui.eventsBody.append(row);
+      if (returnRevision === event.revision_id) state.previousFocus = button;
+      if (focusedRevision === event.revision_id) button.focus({ preventScroll: true });
     });
+    if (focusedRevision && !ui.eventsBody.contains(document.activeElement)) ui.pauseStream.focus({ preventScroll: true });
     ui.eventCount.textContent = `${formatCount(displayed.length)} of ${formatCount(state.events.length)} event${state.events.length === 1 ? "" : "s"} shown`;
   }
 
@@ -719,7 +741,7 @@
       ["Issues", Array.isArray(processing.issues) ? processing.issues.length : "—"],
     ], processing.revision_id || event.revision_id));
     content.append(traceSection("Canonical envelope", [
-      ["Schema", envelope?.schema_version], ["Class UID", canonical.class_uid], ["Action", canonical.action || event.action],
+      ["Schema", envelope?.schema_version], ["Class UID", canonical.class_uid], ["Action", canonical.action],
       ["Source IP", canonical.src_ip], ["Destination IP", canonical.dst_ip], ["Provenance fields", provenanceCount],
       ["Quality score", numberOrNull(envelope?.quality?.score) === null ? "—" : `${Math.round(envelope.quality.score * 100)}%`],
     ]));
@@ -743,14 +765,17 @@
     ui.traceContent.replaceChildren();
     const loading = document.createElement("p"); loading.className = "trace-loading"; loading.textContent = "Loading trace metadata…"; ui.traceContent.append(loading);
     ui.closeTrace.focus();
+    const traceTenant = state.tenant;
     try {
       const [envelope, receipt] = await Promise.all([
         fetchJSON(traceMetadataURL(event.event_url, `/api/v1/events/${encodeURIComponent(event.revision_id)}`)),
         fetchJSON(traceMetadataURL(event.receipt_url, `/api/v1/receipts/${encodeURIComponent(event.receipt_id)}`)),
       ]);
+      if (traceTenant !== state.tenant || state.selectedRevision !== event.revision_id || !ui.drawer.classList.contains("open")) return;
       renderTrace(event, envelope, receipt);
       announce(`Trace loaded for revision ${event.revision_id}`);
     } catch (error) {
+      if (traceTenant !== state.tenant || state.selectedRevision !== event.revision_id || !ui.drawer.classList.contains("open")) return;
       const message = document.createElement("div"); message.className = "trace-error";
       message.textContent = `Trace metadata could not be loaded: ${describeError(error)}`;
       ui.traceContent.replaceChildren(message);
@@ -776,14 +801,16 @@
     state.summary = summary;
     state.health = health;
     populateScopeFilters(summary);
-    applyScope();
+    applyScope(true);
     ui.lastUpdated.textContent = formatTime(summary?.generated_at || new Date().toISOString());
   }
 
   function resetData() {
+    live.reset();
     state.summary = null; state.health = null; state.fallbackEvents = []; state.activity = []; state.events = []; state.eventsNewestFirst = true; state.selectedRevision = "";
     state.sourceFamily = ""; state.format = ""; state.status = ""; state.search = "";
     ui.eventSearch.value = "";
+    ui.sortTime.textContent = "Time ↓";
     replaceSelectOptions(ui.environmentFilter, [], "All environments", "");
     replaceSelectOptions(ui.instanceFilter, [], "All instances", "");
     ui.nodeGroups.replaceChildren();
@@ -797,6 +824,7 @@
     if (!state.tenant || !state.token) return;
     if (state.refreshController) state.refreshController.abort();
     const controller = new AbortController(); state.refreshController = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
     state.loading = true;
     ui.refresh.classList.add("loading"); ui.refresh.disabled = true;
     const tenant = encodeURIComponent(state.tenant);
@@ -806,7 +834,10 @@
       fetchJSON(`/api/v1/events?tenant_id=${tenant}&limit=50`, { signal: controller.signal }),
     ];
     const results = await Promise.allSettled(jobs);
+    window.clearTimeout(timeout);
     try {
+      if (state.refreshController !== controller) return;
+      if (controller.signal.aborted) throw new Error("Dashboard request timed out. Check the service and refresh.");
       const health = results[0].status === "fulfilled" ? results[0].value : null;
       const summaryResult = results[1];
       const eventsResult = results[2];
@@ -820,6 +851,7 @@
       state.fallbackEvents = Array.isArray(page.items) ? page.items : [];
       state.events = recentEvents || state.fallbackEvents;
       applySummary(summary, health);
+      if (!summary || !health?.ready) live.unavailable();
       setConnection(health?.ready ? "live" : "error", health?.ready ? "Connected" : "Connected · not ready", state.tenant);
       ui.sidebarTenant.textContent = state.tenant;
       const partial = summaryResult.status === "rejected" || eventsResult.status === "rejected";
@@ -828,6 +860,7 @@
     } catch (error) {
       if (error?.name !== "AbortError") {
         state.connected = false;
+        live.unavailable();
         setConnection("error", "Connection failed", state.tenant || "No tenant");
         showNotice(describeError(error), "error");
         announce(`Dashboard refresh failed: ${describeError(error)}`);
@@ -845,13 +878,17 @@
     state.timer = null;
     if (!state.streamPaused) {
       state.timer = window.setInterval(() => {
-        if (!document.hidden && state.tenant && state.token) refresh({ quiet: true });
+        if (!document.hidden && state.tenant && state.token && !state.loading) refresh({ quiet: true });
       }, REFRESH_INTERVAL_MS);
     }
   }
 
   function toggleStream() {
     state.streamPaused = !state.streamPaused;
+    if (state.streamPaused) {
+      live.stop("Simulation stopped because dashboard refresh was paused. Accepted events remain stored.");
+      cancelRefresh();
+    }
     ui.pauseStream.textContent = state.streamPaused ? "Resume" : "Pause";
     ui.pauseStream.setAttribute("aria-pressed", state.streamPaused ? "true" : "false");
     ui.streamState.textContent = state.streamPaused ? "Paused" : "Live";
@@ -864,6 +901,9 @@
   function connect(event) {
     event.preventDefault();
     if (!ui.form.reportValidity()) return;
+    cancelRefresh();
+    state.connected = false;
+    closePipelineStage(false); closeTrace(false); resetData();
     state.tenant = ui.tenant.value.trim(); state.token = ui.token.value;
     setSession(STORAGE_TENANT, state.tenant); setSession(STORAGE_TOKEN, state.token);
     state.events = [];
@@ -873,13 +913,18 @@
   }
 
   function disconnect() {
-    if (state.refreshController) state.refreshController.abort();
+    cancelRefresh();
     state.tenant = ""; state.token = ""; state.connected = false;
     setSession(STORAGE_TENANT, ""); setSession(STORAGE_TOKEN, "");
     ui.tenant.value = ""; ui.token.value = ""; ui.sidebarTenant.textContent = "No tenant";
     setConnection("idle", "Not connected", "Enter tenant and token");
     showNotice("Connection details cleared. Enter a tenant and token to reconnect.");
     closePipelineStage(false); closeTrace(false); resetData(); scheduleRefresh(); ui.tenant.focus();
+  }
+
+  function cancelRefresh() {
+    state.refreshController?.abort(); state.refreshController = null; state.loading = false;
+    ui.refresh.classList.remove("loading"); ui.refresh.disabled = false;
   }
 
   ui.form.addEventListener("submit", connect);

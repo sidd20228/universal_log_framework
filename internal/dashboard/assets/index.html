@@ -7,6 +7,7 @@
   <meta name="description" content="Live Universal Log Processing Framework operator dashboard">
   <title>ULPF · Universal event pipeline</title>
   <link rel="stylesheet" href="/dashboard/styles.css">
+  <script src="/dashboard/live.js" defer></script>
   <script src="/dashboard/app.js" defer></script>
 </head>
 <body>
@@ -16,6 +17,7 @@
       <a class="brand" href="#overview" aria-label="ULPF dashboard home"><span class="brand-mark" aria-hidden="true">U</span><span><strong>ULPF</strong><small>Event operations</small></span></a>
       <nav>
         <a class="nav-link active" href="#overview">Overview</a>
+        <a class="nav-link" href="#simulation">Live simulation</a>
         <a class="nav-link" href="#recent">Event stream</a>
         <a class="nav-link" href="#pipeline">Pipeline</a>
         <a class="nav-link" href="#sources">Sources</a>
@@ -54,7 +56,7 @@
         <section class="metric-strip" aria-label="Pipeline totals">
           <article><span>Total receipts</span><strong id="totalReceipts">—</strong><small id="receiptHint">durably admitted</small></article>
           <article><span>Raw preserved</span><strong id="rawBytes">—</strong><small>content-addressed bytes</small></article>
-          <article><span>Normalized</span><strong id="totalRevisions">—</strong><small id="revisionHint">immutable revisions</small></article>
+          <article><span>Processed</span><strong id="totalRevisions">—</strong><small id="revisionHint">immutable revisions</small></article>
           <article><span>Pipeline health</span><strong id="healthMetric">—</strong><small id="healthHint">Checking readiness</small></article>
         </section>
 
@@ -67,6 +69,29 @@
             <li><button class="pipeline-stage" data-stage="commit" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">04</span><span><strong>Commit</strong><small>Immutable revision</small></span><b>—</b></button></li>
             <li><button class="pipeline-stage" data-stage="deliver" type="button" aria-controls="pipelineDrawer" aria-expanded="false"><span class="stage-num">05</span><span><strong>Deliver</strong><small>SIEM / data lake</small></span><b>—</b></button></li>
           </ol>
+        </section>
+
+        <section class="simulation-panel" id="simulation" aria-labelledby="simulationTitle">
+          <div class="simulation-intro"><div><h2 id="simulationTitle">Bring the pipeline to life</h2><p>14 sample sources. 7 formats. Real ingestion, receipts and processing.</p></div><span class="simulation-badge" id="simulationBadge">Ready to simulate</span></div>
+          <div class="simulation-controls">
+            <label>Source scenario<select id="simulationScenario"><option value="all">Enterprise mix · all sources</option><option value="security">Network &amp; identity</option><option value="operations">Cloud &amp; operations</option><option value="endpoint">Endpoint telemetry</option></select></label>
+            <label>Target pace<select id="simulationSpeed"><option value="1">Steady · 1 event / sec</option><option value="2" selected>Active · 2 events / sec</option><option value="4">Busy · 4 events / sec</option></select></label>
+            <button class="button primary" id="simulationStart" type="button" disabled>Start simulation</button><button class="button" id="simulationStop" type="button" disabled>Stop</button>
+            <div class="simulation-progress"><strong id="simulationAccepted">0 accepted</strong><span id="simulationClock">3 minute session</span></div>
+          </div>
+          <p id="simulationMessage" class="simulation-message" role="status">Connect to send synthetic logs through this server’s configured HTTP listener. Events are persisted in its configured tenant.</p>
+        </section>
+
+        <section class="telemetry-grid" aria-label="Live telemetry">
+          <article class="panel telemetry-chart"><div class="section-head"><h2>Live processing rate</h2><strong id="liveRateValue">— events/s</strong></div><div class="telemetry-legend"><span class="rate-accepted">Accepted</span><span class="rate-processed">Processed</span><span class="rate-delivered">Deliveries</span></div><canvas id="liveRateChart" tabindex="0" role="img" aria-label="Waiting for live rate samples"></canvas><p id="liveRateDetail" class="chart-summary">Collecting real counter deltas. No historical samples invented.</p></article>
+          <article class="panel telemetry-chart"><div class="section-head"><h2>Pipeline backlog</h2><strong id="liveQueueValue">— pending</strong></div><div class="telemetry-legend"><span class="queue-pending">Pending</span><span class="queue-failed">Failed</span></div><canvas id="liveQueueChart" tabindex="0" role="img" aria-label="Waiting for pipeline backlog samples"></canvas><p id="liveQueueDetail" class="chart-summary">Pending receipts and connector work in the selected runtime scope.</p></article>
+          <article class="panel source-mix-panel"><div class="section-head"><h2>Source mix</h2><span id="liveSourceCount">0 sources</span></div><p class="panel-copy">Current event window · select a bar to filter the stream.</p><div id="liveSourceMix" class="source-mix"><p class="node-empty">Waiting for event metadata.</p></div></article>
+        </section>
+
+        <section class="log-console" aria-labelledby="consoleTitle">
+          <div class="console-head"><div><h2 id="consoleTitle">Incoming simulation logs</h2><p>Generated input → acknowledged receipt → observed processing status</p></div><div class="console-actions"><span id="consoleCount">0 inputs</span><button class="button" id="consoleFollow" type="button" aria-pressed="true">Freeze console</button><button class="button" id="consoleClear" type="button">Clear view</button></div></div>
+          <ol id="liveLogFeed" class="live-log-feed" aria-label="Latest synthetic inputs, newest first"><li class="console-empty">Start a simulation to watch incoming payloads. The event stream below shows actual indexed events from all sources.</li></ol>
+          <div class="console-foot"><span id="consoleState">Waiting for a simulation</span><span>Last 80 inputs · previews only · HTTP transport</span></div>
         </section>
 
         <section class="operations-grid">

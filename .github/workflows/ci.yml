@@ -30,6 +30,11 @@ jobs:
         run: make vet
       - name: Unit and integration tests
         run: make test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dashboard simulation behavior
+        run: make test-dashboard
       - name: JSON Schema contracts
         run: ./scripts/validate-schemas.sh
       - name: OCSF vendor integrity

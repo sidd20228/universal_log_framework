@@ -26,15 +26,15 @@ func Handler() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	assetBodies := make(map[string][]byte, 3)
-	for _, name := range []string{"index.html", "styles.css", "app.js"} {
+	assetBodies := make(map[string][]byte, 4)
+	for _, name := range []string{"index.html", "styles.css", "live.js", "app.js"} {
 		body, readErr := fs.ReadFile(assets, name)
 		if readErr != nil {
 			panic(readErr)
 		}
 		assetBodies[name] = body
 	}
-	for _, name := range []string{"styles.css", "app.js"} {
+	for _, name := range []string{"styles.css", "live.js", "app.js"} {
 		digest := sha256.Sum256(assetBodies[name])
 		plainURL := []byte("/dashboard/" + name)
 		versionedURL := []byte("/dashboard/" + name + "?v=" + hex.EncodeToString(digest[:6]))
@@ -59,7 +59,7 @@ func Handler() http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if name != "index.html" && name != "styles.css" && name != "app.js" {
+		if name != "index.html" && name != "styles.css" && name != "live.js" && name != "app.js" {
 			http.NotFound(writer, request)
 			return
 		}

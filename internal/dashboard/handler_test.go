@@ -22,6 +22,7 @@ func TestHandlerServesEmbeddedDashboard(t *testing.T) {
 		{path: "/dashboard/", contentType: "text/html", contains: "Universal event pipeline", cache: "no-store"},
 		{path: "/dashboard/styles.css", contentType: "text/css", contains: "--navy", cache: "must-revalidate"},
 		{path: "/dashboard/app.js", contentType: "text/javascript", contains: "/api/v1/dashboard/summary", cache: "must-revalidate"},
+		{path: "/dashboard/live.js", contentType: "text/javascript", contains: "class Simulation", cache: "must-revalidate"},
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {
@@ -105,7 +106,7 @@ func TestHandlerRequiresAssetRevalidation(t *testing.T) {
 func TestHandlerVersionsAssetURLsByContent(t *testing.T) {
 	response := httptest.NewRecorder()
 	Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/dashboard/", nil))
-	for _, name := range []string{"styles.css", "app.js"} {
+	for _, name := range []string{"styles.css", "live.js", "app.js"} {
 		asset, err := fs.ReadFile(embedded, "assets/"+name)
 		if err != nil {
 			t.Fatal(err)

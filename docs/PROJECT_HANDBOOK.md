@@ -88,7 +88,8 @@ different configured token for every peer and proxies trace reads locally, so
 peer credentials never enter browser storage.
 
 The dashboard stores the operator-entered local bearer token in session storage
-only. Raw event bytes are never fetched or displayed by the dashboard.
+only. Stored raw evidence is never fetched by the dashboard; the simulation
+console previews only synthetic inputs generated in the current browser.
 
 ## Ingestion and evidence preservation
 
@@ -221,6 +222,14 @@ inference, and a model registry are outside the runtime.
 `/dashboard/` is embedded into the binary. It refreshes tenant-scoped totals,
 pipeline stages, activity, interpretation status, recent events, delivery
 counts, and trace metadata. It displays event environment and instance origin.
+
+The live simulation sends up to three minutes of synthetic inputs through the
+real HTTP listener, with source scenarios and 1/2/4-input-per-second controls.
+An incoming console links acknowledged payload previews to observed processing
+statuses and the trace inspector. Two-second polling powers live processing
+rates, pipeline backlog, and an interactive source-mix chart. Stop, hiding the
+tab, or pausing dashboard refresh ends generation. See [the dashboard guide](DASHBOARD.md#run-the-live-simulation)
+for tenant routing, permissions, persistence, controls, and graph definitions.
 
 Configured federation peers are queried concurrently with individual timeouts.
 Totals and activity are aggregated, recent events retain their origin, and

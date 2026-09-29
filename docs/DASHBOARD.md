@@ -18,7 +18,7 @@ the tab session, and is sent only to same-origin ULPF endpoints. Clear removes
 the saved tenant and token. The server does not create a dashboard session or
 set an authentication cookie.
 
-The dashboard refreshes every ten seconds while its tab is visible. Select
+The dashboard refreshes every two seconds while its tab is visible. Select
 **Pause** to hold the event stream, **Resume** to continue, or **Refresh** for
 an immediate update.
 
@@ -42,6 +42,63 @@ an immediate update.
 The trace inspector deliberately does not request or render raw event bytes.
 Raw evidence remains behind the separate `raw:read` scope and the receipt raw
 endpoint.
+
+## Run the live simulation
+
+In **Live simulation**, choose a source scenario and a target pace of 1, 2, or
+4 inputs per second, then select **Start simulation**. The enterprise scenario
+cycles through 14 source shapes in JSON, CEF, LEEF, key-value, Syslog, XML and
+CSV. Network/identity, cloud/operations and endpoint scenarios narrow the mix.
+These are synthetic compatibility samples, not vendor-certified integrations.
+All samples use the actual HTTP ingestion endpoint; Syslog here is a payload
+format, not a running Syslog network listener.
+
+The token needs `events:write` as well as read access. The HTTP listener's
+server-configured tenant receives the inputs; selecting a dashboard tenant,
+environment, or federated peer does not reroute ingestion. Use a matching view
+to observe processing. Accepted samples are durably persisted and remain after
+the session ends.
+
+A session lasts at most three minutes (at most 720 inputs at the highest pace).
+Only one request is in flight; slower servers reduce the achieved pace. Stop,
+Clear connection, reconnect, pausing dashboard refresh, hiding the browser tab,
+and leaving the page stop generation. Requests time out after eight seconds;
+an error stops the session without automatic retry. An aborted request may
+already have been admitted, so the accepted counter includes only confirmed
+acknowledgements. Sessions never restart automatically.
+
+The incoming console shows previews of inputs generated in this browser,
+receipt acknowledgements, and processing statuses when observed in the current
+summary window. It retains 80 inputs in memory. **Freeze console** holds the
+visible rows while ingestion continues; **Follow live** catches up. **Clear
+view** only clears the console buffer. Select a processed status to open the
+trace inspector. This console does not fetch stored raw evidence.
+
+Three additional graphs update from actual service snapshots:
+
+- **Live processing rate:** counter differences divided by elapsed time for
+  admitted receipts, committed revisions, and successful connector deliveries.
+  Multiple connectors can produce multiple deliveries per revision. The large
+  events/s value is the admitted receipt rate. Hover or focus the chart and use
+  arrow keys, Home, or End to inspect samples.
+- **Pipeline backlog:** pending receipt work plus pending/retrying connector
+  work, and dead-letter counts. These are queue items, not unique event counts.
+- **Source mix:** source-family counts in the current bounded event window;
+  selecting a bar filters the event stream.
+
+Rate charts retain up to 60 samples over two minutes. They need two valid
+snapshots and reset on scope changes, counter resets, missing telemetry, or a
+sampling gap longer than 15 seconds. Stale or unavailable federated origins
+suppress live rates until fresh measurements resume. Charts do not backfill
+fabricated history.
+Source/format/status table filters do not change scope-wide graphs. The existing
+five-minute throughput chart and status distribution remain available below.
+Without configured canonical mappings, parsed syntax can correctly appear as
+`PARTIALLY_PARSED`; the dashboard does not relabel it as fully normalized.
+
+Developer checks: `make test-dashboard` (Node 22+, no npm dependencies) covers
+pacing, stop/restart, timeouts, rejected acknowledgements, scenario coverage,
+counter deltas, and history bounds. CI runs it alongside the Go tests.
 
 ## Populate the multi-source demo
 
