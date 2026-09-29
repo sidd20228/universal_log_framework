@@ -1,0 +1,1 @@
+event=traffic time=2026-09-29T10:20:29Z action=BLOCK status=SUCCESS severity_id=3 severity=WARNING src=10.0.0.8 spt=51514 src_host=CLIENT.EXAMPLE src_mac=02:00:00:00:00:08 dst=198.51.100.25 dpt=443 proto=TCP proto_num=6 device_type=FW device_host=EDGE-01 device_vendor=Synthetic device_product="Reference Firewall" zone=DMZ opaque=preserve-kv
