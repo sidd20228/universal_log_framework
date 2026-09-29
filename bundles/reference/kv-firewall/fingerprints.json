@@ -1,0 +1,1 @@
+{"config_version":"ulpf-fingerprints/1","fingerprints":[{"parser_id":"reference-kv-firewall","required_literals":["event=traffic","src="],"score":1000,"specificity":200}]}

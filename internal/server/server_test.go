@@ -7,12 +7,89 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/sidd20228/universal_log_framework/internal/server"
 )
+
+func TestServiceCompilesActivatedReferenceBundleThroughHTTP(t *testing.T) {
+	root := t.TempDir()
+	t.Cleanup(func() {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err == nil {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
+	bundle := filepath.Join("..", "..", "bundles", "reference", "json-firewall")
+	payload, err := os.ReadFile(filepath.Join(bundle, "fixtures", "valid", "traffic.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := server.New(context.Background(), server.Config{
+		SQLitePath: filepath.Join(root, "state", "ulpf.sqlite"), RawRoot: filepath.Join(root, "raw"), BundleRoot: filepath.Join(root, "catalog"),
+		TenantID: "demo", EnvironmentID: "test", InstanceID: "node-a", SourceProfileID: "reference-json",
+		SourceBundles: []server.SourceBundle{{SourceProfileID: "reference-json", Directory: bundle}},
+		Token:         testToken, Workers: 1, ProcessingTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = service.Serve(ctx, listener) }()
+	baseURL := "http://" + listener.Addr().String()
+	waitReady(t, baseURL)
+	request, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/ingest", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/octet-stream")
+	request.Header.Set("Authorization", "Bearer "+testToken)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("ingest status = %d", response.StatusCode)
+	}
+	var found map[string]any
+	deadline := time.Now().Add(4 * time.Second)
+	for time.Now().Before(deadline) {
+		listRequest, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/events?tenant_id=demo", nil)
+		listRequest.Header.Set("Authorization", "Bearer "+testToken)
+		listResponse, _ := http.DefaultClient.Do(listRequest)
+		var page struct {
+			Items []struct {
+				RevisionID string `json:"revision_id"`
+			} `json:"items"`
+		}
+		_ = json.NewDecoder(listResponse.Body).Decode(&page)
+		listResponse.Body.Close()
+		if len(page.Items) == 1 {
+			detailRequest, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/events/"+page.Items[0].RevisionID, nil)
+			detailRequest.Header.Set("Authorization", "Bearer "+testToken)
+			detailResponse, _ := http.DefaultClient.Do(detailRequest)
+			_ = json.NewDecoder(detailResponse.Body).Decode(&found)
+			detailResponse.Body.Close()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	processing, _ := found["processing"].(map[string]any)
+	receipt, _ := found["receipt"].(map[string]any)
+	provenance, _ := found["provenance"].(map[string]any)
+	if processing["status"] != "PARSED" || processing["mapping_version"] == "" || receipt["source_profile_id"] != "reference-json" || len(provenance) == 0 {
+		t.Fatalf("normalized envelope = %#v", found)
+	}
+}
 
 const testToken = "serve-test-token-000000000000000001"
 

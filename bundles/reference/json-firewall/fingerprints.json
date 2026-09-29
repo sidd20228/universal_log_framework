@@ -1,0 +1,1 @@
+{"config_version":"ulpf-fingerprints/1","fingerprints":[{"parser_id":"reference-json-firewall","required_literals":["\"event_type\"","\"source_address\""],"score":1000,"specificity":200}]}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ulpf.example/schemas/ulpf-feature-set-1.0.0.json",
+  "title": "ULPF analytics feature set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "id",
+    "version",
+    "envelope_schema_version",
+    "features"
+  ],
+  "properties": {
+    "contract_version": {"const": "ulpf-feature-set/1.0.0"},
+    "id": {"$ref": "#/$defs/identifier"},
+    "version": {"$ref": "#/$defs/version"},
+    "envelope_schema_version": {"const": "ulpf-envelope/1.0.0"},
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/feature"}
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "source_path", "null_policy"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "enum": ["boolean", "integer", "number", "string", "timestamp", "ip"]
+        },
+        "source_path": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^event\\.[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$"
+            },
+            {
+              "enum": [
+                "quality.score",
+                "quality.required_present",
+                "quality.required_total",
+                "quality.provenance_present",
+                "quality.provenance_total",
+                "processing.status",
+                "processing.confidence"
+              ]
+            }
+          ]
+        },
+        "null_policy": {"enum": ["required", "nullable"]},
+        "description": {"type": "string", "maxLength": 512}
+      }
+    }
+  }
+}

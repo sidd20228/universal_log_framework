@@ -1,0 +1,988 @@
+ULPF evaluation verification
+generated_at=2026-09-29T12:30:59Z
+git_commit=a63d133812d47d6822c011979ea54b1c6f954f44
+git_dirty=true
+PASS  T01 ADRs and acceptance contract
+PASS  T02 vendored OCSF provenance and checksums
+PASS  T03 envelope/config/bundle schemas
+PASS  T04-T06 CLI, config, and state model
+PASS  T07-T10 durability and observability
+PASS  T11-T18 interpretation stack
+PASS  T19-T27 worker, outputs, query, transports, auth, and lifecycle
+PASS  T28-T31 corpus, security, faults, and generator
+PASS  T32-T34 deployment and offline tooling
+PASS  T35 measured performance artifacts
+PASS  T36 fresh-user, operator, and parser-authoring documentation
+PASS  T37 architecture source and PDF
+PASS  T38 two successful demo rehearsals within 120 seconds
+PASS  T39 editable five-slide presentation
+PASS  T40 trace document, expected outcomes, and verifier
+PASS  T41 dynamic dashboard frontend, API, guide, and design reference
+PASS  T37 architecture PDF has exactly two pages
+PASS  T39 presentation contains exactly five slides
+PASS  T35 report accounting, claim boundary, and profile digests
+ok  	github.com/sidd20228/universal_log_framework/cmd/ulpf	0.830s
+?   	github.com/sidd20228/universal_log_framework/cmd/ulpf-benchgen	[no test files]
+?   	github.com/sidd20228/universal_log_framework/cmd/ulpf-benchmark	[no test files]
+ok  	github.com/sidd20228/universal_log_framework/internal/analytics	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/auth	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/benchgen	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/benchrun	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/bundlecompile	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/control	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/dashboard	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/dashboardapi	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver/clickhouse	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver/http	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver/ndjson	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver/parquet	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/detect	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/envelope	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/evidence	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/inbox	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/ingress	(cached)
+?   	github.com/sidd20228/universal_log_framework/internal/interpret	[no test files]
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/cef	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/csv	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/json	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/kv	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/mapping	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/re2parser	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/syslog	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/xml	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/model	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/observe	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/query	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/registry	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/securitytest	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/server	1.722s
+ok  	github.com/sidd20228/universal_log_framework/internal/worker	(cached)
+?   	github.com/sidd20228/universal_log_framework/migrations/sqlite	[no test files]
+ok  	github.com/sidd20228/universal_log_framework/tests/e2e	(cached)
+PASS  Go unit/integration suite
+ok  	github.com/sidd20228/universal_log_framework/internal/auth	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/evidence	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/inbox	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/ingress	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/worker	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/deliver	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/query	2.690s
+ok  	github.com/sidd20228/universal_log_framework/internal/dashboard	(cached)
+ok  	github.com/sidd20228/universal_log_framework/internal/dashboardapi	1.776s
+ok  	github.com/sidd20228/universal_log_framework/internal/server	3.499s
+ok  	github.com/sidd20228/universal_log_framework/tests/e2e	(cached)
+PASS  Focused race suite for durable, security, and dashboard boundaries
+PASS  Go vet
+CHANGELOG.md: OK
+LICENSE: OK
+NOTICE: OK
+README.md: OK
+categories.json: OK
+dictionary.json: OK
+events/application/api_activity.json: OK
+events/application/application.json: OK
+events/application/application_error.json: OK
+events/application/application_lifecycle.json: OK
+events/application/datastore_activity.json: OK
+events/application/file_hosting.json: OK
+events/application/scan_activity.json: OK
+events/application/web_resource_access_activity.json: OK
+events/application/web_resources_activity.json: OK
+events/base_event.json: OK
+events/discovery/admin_group_query.json: OK
+events/discovery/cloud_resources_inventory_info.json: OK
+events/discovery/config_state.json: OK
+events/discovery/device_config_state_change.json: OK
+events/discovery/discovery.json: OK
+events/discovery/discovery_result.json: OK
+events/discovery/evidence_info.json: OK
+events/discovery/file_query.json: OK
+events/discovery/folder_query.json: OK
+events/discovery/inventory_info.json: OK
+events/discovery/job_query.json: OK
+events/discovery/kernel_object_query.json: OK
+events/discovery/module_query.json: OK
+events/discovery/network_connection_query.json: OK
+events/discovery/networks_query.json: OK
+events/discovery/osint_inventory_info.json: OK
+events/discovery/patch_state.json: OK
+events/discovery/peripheral_device_query.json: OK
+events/discovery/process_query.json: OK
+events/discovery/service_query.json: OK
+events/discovery/session_query.json: OK
+events/discovery/software_info.json: OK
+events/discovery/startup_item_query.json: OK
+events/discovery/user_inventory.json: OK
+events/discovery/user_query.json: OK
+events/findings/application_security_posture_finding.json: OK
+events/findings/compliance_finding.json: OK
+events/findings/data_security_finding.json: OK
+events/findings/detection_finding.json: OK
+events/findings/finding.json: OK
+events/findings/iam_analysis_finding.json: OK
+events/findings/incident_finding.json: OK
+events/findings/security_finding.json: OK
+events/findings/vulnerability_finding.json: OK
+events/iam/account_change.json: OK
+events/iam/authentication.json: OK
+events/iam/authorize_session.json: OK
+events/iam/entity_management.json: OK
+events/iam/group_management.json: OK
+events/iam/iam.json: OK
+events/iam/role_management.json: OK
+events/iam/user_access.json: OK
+events/iam/user_management.json: OK
+events/network/dhcp_activity.json: OK
+events/network/dns_activity.json: OK
+events/network/email_activity.json: OK
+events/network/email_file_activity.json: OK
+events/network/email_url_activity.json: OK
+events/network/ftp_activity.json: OK
+events/network/http_activity.json: OK
+events/network/network.json: OK
+events/network/network_activity.json: OK
+events/network/network_file_activity.json: OK
+events/network/ntp_activity.json: OK
+events/network/rdp_activity.json: OK
+events/network/smb_activity.json: OK
+events/network/ssh_activity.json: OK
+events/network/tunnel_activity.json: OK
+events/remediation/file_remediation_activity.json: OK
+events/remediation/network_remediation_activity.json: OK
+events/remediation/process_remediation_activity.json: OK
+events/remediation/remediation_activity.json: OK
+events/system/clipboard_activity.json: OK
+events/system/device_power_state_activity.json: OK
+events/system/event_log_activity.json: OK
+events/system/file_activity.json: OK
+events/system/kernel_activity.json: OK
+events/system/kernel_extension_activity.json: OK
+events/system/memory_activity.json: OK
+events/system/module_activity.json: OK
+events/system/peripheral_activity.json: OK
+events/system/process_activity.json: OK
+events/system/scheduled_job_activity.json: OK
+events/system/script_activity.json: OK
+events/system/system.json: OK
+events/unmanned_systems/airborne_broadcast_activity.json: OK
+events/unmanned_systems/drone_flights_activity.json: OK
+events/unmanned_systems/unmanned_systems.json: OK
+extensions.md: OK
+extensions/README.md: OK
+extensions/linux/extension.json: OK
+extensions/linux/objects/process.json: OK
+extensions/linux/profiles/linux_users.json: OK
+extensions/macos/extension.json: OK
+extensions/macos/objects/process.json: OK
+extensions/macos/profiles/macos_users.json: OK
+extensions/windows/dictionary.json: OK
+extensions/windows/events/prefetch_query.json: OK
+extensions/windows/events/registry_key_activity.json: OK
+extensions/windows/events/registry_key_query.json: OK
+extensions/windows/events/registry_value_activity.json: OK
+extensions/windows/events/registry_value_query.json: OK
+extensions/windows/events/windows_resource_activity.json: OK
+extensions/windows/events/windows_service_activity.json: OK
+extensions/windows/extension.json: OK
+extensions/windows/objects/evidences.json: OK
+extensions/windows/objects/process.json: OK
+extensions/windows/objects/query_evidence.json: OK
+extensions/windows/objects/registry_key.json: OK
+extensions/windows/objects/registry_value.json: OK
+extensions/windows/objects/startup_item.json: OK
+extensions/windows/objects/win_resource.json: OK
+extensions/windows/objects/win_service.json: OK
+metaschema/attribute.schema.json: OK
+metaschema/categories.schema.json: OK
+metaschema/common-event-object.schema.json: OK
+metaschema/deprecated.schema.json: OK
+metaschema/dictionary-attribute.schema.json: OK
+metaschema/dictionary.schema.json: OK
+metaschema/enum.schema.json: OK
+metaschema/event.schema.json: OK
+metaschema/extension.schema.json: OK
+metaschema/object.schema.json: OK
+metaschema/observable.schema.json: OK
+metaschema/profile.schema.json: OK
+metaschema/references.schema.json: OK
+metaschema/semver.schema.json: OK
+objects/_entity.json: OK
+objects/_resource.json: OK
+objects/access_analysis_result.json: OK
+objects/account.json: OK
+objects/actor.json: OK
+objects/additional_restriction.json: OK
+objects/advisory.json: OK
+objects/affected_code.json: OK
+objects/affected_package.json: OK
+objects/agent.json: OK
+objects/ai_agent.json: OK
+objects/ai_model.json: OK
+objects/aircraft.json: OK
+objects/analysis_target.json: OK
+objects/analytic.json: OK
+objects/anomaly.json: OK
+objects/anomaly_analysis.json: OK
+objects/api.json: OK
+objects/application.json: OK
+objects/assessment.json: OK
+objects/attack.json: OK
+objects/attestation.json: OK
+objects/auth_factor.json: OK
+objects/authentication_token.json: OK
+objects/authorization.json: OK
+objects/autonomous_system.json: OK
+objects/baseline.json: OK
+objects/campaign.json: OK
+objects/certificate.json: OK
+objects/check.json: OK
+objects/cis_benchmark.json: OK
+objects/cis_benchmark_result.json: OK
+objects/cis_control.json: OK
+objects/cis_csc.json: OK
+objects/classifier_details.json: OK
+objects/clipboard.json: OK
+objects/clipboard_item.json: OK
+objects/cloud.json: OK
+objects/compliance.json: OK
+objects/container.json: OK
+objects/cpu_info.json: OK
+objects/cve.json: OK
+objects/cvss.json: OK
+objects/cwe.json: OK
+objects/d3f_tactic.json: OK
+objects/d3f_technique.json: OK
+objects/d3fend.json: OK
+objects/data_classification.json: OK
+objects/data_security.json: OK
+objects/database.json: OK
+objects/databucket.json: OK
+objects/dce_rpc.json: OK
+objects/delegation.json: OK
+objects/device.json: OK
+objects/device_hw_info.json: OK
+objects/digital_signature.json: OK
+objects/discovery_details.json: OK
+objects/display.json: OK
+objects/dns_answer.json: OK
+objects/dns_query.json: OK
+objects/dns_resource_record.json: OK
+objects/dns_section.json: OK
+objects/domain_contact.json: OK
+objects/download_info.json: OK
+objects/edge.json: OK
+objects/email.json: OK
+objects/email_auth.json: OK
+objects/encryption_details.json: OK
+objects/endpoint.json: OK
+objects/endpoint_connection.json: OK
+objects/enrichment.json: OK
+objects/environment_variable.json: OK
+objects/epss.json: OK
+objects/evidences.json: OK
+objects/extension.json: OK
+objects/feature.json: OK
+objects/file.json: OK
+objects/finding.json: OK
+objects/finding_info.json: OK
+objects/fingerprint.json: OK
+objects/firewall_rule.json: OK
+objects/function_invocation.json: OK
+objects/gpu_info.json: OK
+objects/graph.json: OK
+objects/group.json: OK
+objects/hassh.json: OK
+objects/http_cookie.json: OK
+objects/http_header.json: OK
+objects/http_request.json: OK
+objects/http_response.json: OK
+objects/iam_role.json: OK
+objects/identity_activity_metrics.json: OK
+objects/idp.json: OK
+objects/image.json: OK
+objects/ja4_fingerprint.json: OK
+objects/job.json: OK
+objects/job_action.json: OK
+objects/job_trigger.json: OK
+objects/kb_article.json: OK
+objects/kernel.json: OK
+objects/kernel_driver.json: OK
+objects/key_value_object.json: OK
+objects/keyboard_info.json: OK
+objects/kill_chain_phase.json: OK
+objects/ldap_person.json: OK
+objects/load_balancer.json: OK
+objects/location.json: OK
+objects/logger.json: OK
+objects/long_string.json: OK
+objects/malware.json: OK
+objects/malware_scan_info.json: OK
+objects/managed_entity.json: OK
+objects/message_context.json: OK
+objects/metadata.json: OK
+objects/metric.json: OK
+objects/mitigation.json: OK
+objects/module.json: OK
+objects/network_connection_info.json: OK
+objects/network_endpoint.json: OK
+objects/network_interface.json: OK
+objects/network_proxy.json: OK
+objects/network_traffic.json: OK
+objects/node.json: OK
+objects/note.json: OK
+objects/object.json: OK
+objects/observable.json: OK
+objects/observation.json: OK
+objects/occurrence_details.json: OK
+objects/organization.json: OK
+objects/os.json: OK
+objects/osint.json: OK
+objects/package.json: OK
+objects/packet.json: OK
+objects/parameter.json: OK
+objects/peripheral_device.json: OK
+objects/permission_analysis_result.json: OK
+objects/policy.json: OK
+objects/port_info.json: OK
+objects/prev_event.json: OK
+objects/privilege_attack_info.json: OK
+objects/privilege_info.json: OK
+objects/process.json: OK
+objects/process_entity.json: OK
+objects/product.json: OK
+objects/programmatic_credential.json: OK
+objects/query_evidence.json: OK
+objects/query_info.json: OK
+objects/related_event.json: OK
+objects/remediation.json: OK
+objects/reporter.json: OK
+objects/reputation.json: OK
+objects/request.json: OK
+objects/resource_details.json: OK
+objects/response.json: OK
+objects/rpc_interface.json: OK
+objects/rule.json: OK
+objects/san.json: OK
+objects/sbom.json: OK
+objects/scan.json: OK
+objects/scim.json: OK
+objects/script.json: OK
+objects/security_state.json: OK
+objects/sensor_info.json: OK
+objects/service.json: OK
+objects/service_privilege_analysis.json: OK
+objects/session.json: OK
+objects/software_component.json: OK
+objects/span.json: OK
+objects/sso.json: OK
+objects/startup_item.json: OK
+objects/sub_technique.json: OK
+objects/table.json: OK
+objects/tactic.json: OK
+objects/technique.json: OK
+objects/threat_actor.json: OK
+objects/ticket.json: OK
+objects/timespan.json: OK
+objects/tls.json: OK
+objects/tls_extension.json: OK
+objects/token.json: OK
+objects/trace.json: OK
+objects/trait.json: OK
+objects/transformation_info.json: OK
+objects/tsig.json: OK
+objects/unmanned_aerial_system.json: OK
+objects/unmanned_system_operating_area.json: OK
+objects/url.json: OK
+objects/user.json: OK
+objects/vendor_attributes.json: OK
+objects/vulnerability.json: OK
+objects/web_resource.json: OK
+objects/whois.json: OK
+profiles/ai_operation.json: OK
+profiles/cloud.json: OK
+profiles/container.json: OK
+profiles/data_classification.json: OK
+profiles/datetime.json: OK
+profiles/host.json: OK
+profiles/incident.json: OK
+profiles/load_balancer.json: OK
+profiles/network_proxy.json: OK
+profiles/osint.json: OK
+profiles/record_integrity.json: OK
+profiles/security_control.json: OK
+profiles/trace.json: OK
+templates/event_class_name.json: OK
+templates/object_name.json: OK
+version.json: OK
+OCSF 1.9.0 vendor checksums verified
+PASS  OCSF vendor checksums
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/envelope.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/internal/envelope/testdata/envelope.golden.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/envelope-error-http.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/envelope-error-tcp.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/envelope.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/envelope-missing-raw-integrity.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/config.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/config.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/config-inline-secret.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/parser-bundle-manifest.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/parser-bundle-manifest.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/parser-bundle-path-traversal.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/parser-bundle-executable.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/feature-set.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/feature-set-raw-source.json
+/opt/homebrew/bin/jsonschema:3: DeprecationWarning: The jsonschema CLI is deprecated and will be removed in a future version. Please use check-jsonschema instead, which can be installed from https://pypi.org/project/check-jsonschema/
+  from jsonschema.cli import main
+valid: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/valid/dataset-manifest.json
+invalid as expected: /Users/siddhantparashar/projects/log_processing/universal_log_framework/tests/schema/examples/invalid/dataset-manifest-path-traversal.json
+CHANGELOG.md: OK
+LICENSE: OK
+NOTICE: OK
+README.md: OK
+categories.json: OK
+dictionary.json: OK
+events/application/api_activity.json: OK
+events/application/application.json: OK
+events/application/application_error.json: OK
+events/application/application_lifecycle.json: OK
+events/application/datastore_activity.json: OK
+events/application/file_hosting.json: OK
+events/application/scan_activity.json: OK
+events/application/web_resource_access_activity.json: OK
+events/application/web_resources_activity.json: OK
+events/base_event.json: OK
+events/discovery/admin_group_query.json: OK
+events/discovery/cloud_resources_inventory_info.json: OK
+events/discovery/config_state.json: OK
+events/discovery/device_config_state_change.json: OK
+events/discovery/discovery.json: OK
+events/discovery/discovery_result.json: OK
+events/discovery/evidence_info.json: OK
+events/discovery/file_query.json: OK
+events/discovery/folder_query.json: OK
+events/discovery/inventory_info.json: OK
+events/discovery/job_query.json: OK
+events/discovery/kernel_object_query.json: OK
+events/discovery/module_query.json: OK
+events/discovery/network_connection_query.json: OK
+events/discovery/networks_query.json: OK
+events/discovery/osint_inventory_info.json: OK
+events/discovery/patch_state.json: OK
+events/discovery/peripheral_device_query.json: OK
+events/discovery/process_query.json: OK
+events/discovery/service_query.json: OK
+events/discovery/session_query.json: OK
+events/discovery/software_info.json: OK
+events/discovery/startup_item_query.json: OK
+events/discovery/user_inventory.json: OK
+events/discovery/user_query.json: OK
+events/findings/application_security_posture_finding.json: OK
+events/findings/compliance_finding.json: OK
+events/findings/data_security_finding.json: OK
+events/findings/detection_finding.json: OK
+events/findings/finding.json: OK
+events/findings/iam_analysis_finding.json: OK
+events/findings/incident_finding.json: OK
+events/findings/security_finding.json: OK
+events/findings/vulnerability_finding.json: OK
+events/iam/account_change.json: OK
+events/iam/authentication.json: OK
+events/iam/authorize_session.json: OK
+events/iam/entity_management.json: OK
+events/iam/group_management.json: OK
+events/iam/iam.json: OK
+events/iam/role_management.json: OK
+events/iam/user_access.json: OK
+events/iam/user_management.json: OK
+events/network/dhcp_activity.json: OK
+events/network/dns_activity.json: OK
+events/network/email_activity.json: OK
+events/network/email_file_activity.json: OK
+events/network/email_url_activity.json: OK
+events/network/ftp_activity.json: OK
+events/network/http_activity.json: OK
+events/network/network.json: OK
+events/network/network_activity.json: OK
+events/network/network_file_activity.json: OK
+events/network/ntp_activity.json: OK
+events/network/rdp_activity.json: OK
+events/network/smb_activity.json: OK
+events/network/ssh_activity.json: OK
+events/network/tunnel_activity.json: OK
+events/remediation/file_remediation_activity.json: OK
+events/remediation/network_remediation_activity.json: OK
+events/remediation/process_remediation_activity.json: OK
+events/remediation/remediation_activity.json: OK
+events/system/clipboard_activity.json: OK
+events/system/device_power_state_activity.json: OK
+events/system/event_log_activity.json: OK
+events/system/file_activity.json: OK
+events/system/kernel_activity.json: OK
+events/system/kernel_extension_activity.json: OK
+events/system/memory_activity.json: OK
+events/system/module_activity.json: OK
+events/system/peripheral_activity.json: OK
+events/system/process_activity.json: OK
+events/system/scheduled_job_activity.json: OK
+events/system/script_activity.json: OK
+events/system/system.json: OK
+events/unmanned_systems/airborne_broadcast_activity.json: OK
+events/unmanned_systems/drone_flights_activity.json: OK
+events/unmanned_systems/unmanned_systems.json: OK
+extensions.md: OK
+extensions/README.md: OK
+extensions/linux/extension.json: OK
+extensions/linux/objects/process.json: OK
+extensions/linux/profiles/linux_users.json: OK
+extensions/macos/extension.json: OK
+extensions/macos/objects/process.json: OK
+extensions/macos/profiles/macos_users.json: OK
+extensions/windows/dictionary.json: OK
+extensions/windows/events/prefetch_query.json: OK
+extensions/windows/events/registry_key_activity.json: OK
+extensions/windows/events/registry_key_query.json: OK
+extensions/windows/events/registry_value_activity.json: OK
+extensions/windows/events/registry_value_query.json: OK
+extensions/windows/events/windows_resource_activity.json: OK
+extensions/windows/events/windows_service_activity.json: OK
+extensions/windows/extension.json: OK
+extensions/windows/objects/evidences.json: OK
+extensions/windows/objects/process.json: OK
+extensions/windows/objects/query_evidence.json: OK
+extensions/windows/objects/registry_key.json: OK
+extensions/windows/objects/registry_value.json: OK
+extensions/windows/objects/startup_item.json: OK
+extensions/windows/objects/win_resource.json: OK
+extensions/windows/objects/win_service.json: OK
+metaschema/attribute.schema.json: OK
+metaschema/categories.schema.json: OK
+metaschema/common-event-object.schema.json: OK
+metaschema/deprecated.schema.json: OK
+metaschema/dictionary-attribute.schema.json: OK
+metaschema/dictionary.schema.json: OK
+metaschema/enum.schema.json: OK
+metaschema/event.schema.json: OK
+metaschema/extension.schema.json: OK
+metaschema/object.schema.json: OK
+metaschema/observable.schema.json: OK
+metaschema/profile.schema.json: OK
+metaschema/references.schema.json: OK
+metaschema/semver.schema.json: OK
+objects/_entity.json: OK
+objects/_resource.json: OK
+objects/access_analysis_result.json: OK
+objects/account.json: OK
+objects/actor.json: OK
+objects/additional_restriction.json: OK
+objects/advisory.json: OK
+objects/affected_code.json: OK
+objects/affected_package.json: OK
+objects/agent.json: OK
+objects/ai_agent.json: OK
+objects/ai_model.json: OK
+objects/aircraft.json: OK
+objects/analysis_target.json: OK
+objects/analytic.json: OK
+objects/anomaly.json: OK
+objects/anomaly_analysis.json: OK
+objects/api.json: OK
+objects/application.json: OK
+objects/assessment.json: OK
+objects/attack.json: OK
+objects/attestation.json: OK
+objects/auth_factor.json: OK
+objects/authentication_token.json: OK
+objects/authorization.json: OK
+objects/autonomous_system.json: OK
+objects/baseline.json: OK
+objects/campaign.json: OK
+objects/certificate.json: OK
+objects/check.json: OK
+objects/cis_benchmark.json: OK
+objects/cis_benchmark_result.json: OK
+objects/cis_control.json: OK
+objects/cis_csc.json: OK
+objects/classifier_details.json: OK
+objects/clipboard.json: OK
+objects/clipboard_item.json: OK
+objects/cloud.json: OK
+objects/compliance.json: OK
+objects/container.json: OK
+objects/cpu_info.json: OK
+objects/cve.json: OK
+objects/cvss.json: OK
+objects/cwe.json: OK
+objects/d3f_tactic.json: OK
+objects/d3f_technique.json: OK
+objects/d3fend.json: OK
+objects/data_classification.json: OK
+objects/data_security.json: OK
+objects/database.json: OK
+objects/databucket.json: OK
+objects/dce_rpc.json: OK
+objects/delegation.json: OK
+objects/device.json: OK
+objects/device_hw_info.json: OK
+objects/digital_signature.json: OK
+objects/discovery_details.json: OK
+objects/display.json: OK
+objects/dns_answer.json: OK
+objects/dns_query.json: OK
+objects/dns_resource_record.json: OK
+objects/dns_section.json: OK
+objects/domain_contact.json: OK
+objects/download_info.json: OK
+objects/edge.json: OK
+objects/email.json: OK
+objects/email_auth.json: OK
+objects/encryption_details.json: OK
+objects/endpoint.json: OK
+objects/endpoint_connection.json: OK
+objects/enrichment.json: OK
+objects/environment_variable.json: OK
+objects/epss.json: OK
+objects/evidences.json: OK
+objects/extension.json: OK
+objects/feature.json: OK
+objects/file.json: OK
+objects/finding.json: OK
+objects/finding_info.json: OK
+objects/fingerprint.json: OK
+objects/firewall_rule.json: OK
+objects/function_invocation.json: OK
+objects/gpu_info.json: OK
+objects/graph.json: OK
+objects/group.json: OK
+objects/hassh.json: OK
+objects/http_cookie.json: OK
+objects/http_header.json: OK
+objects/http_request.json: OK
+objects/http_response.json: OK
+objects/iam_role.json: OK
+objects/identity_activity_metrics.json: OK
+objects/idp.json: OK
+objects/image.json: OK
+objects/ja4_fingerprint.json: OK
+objects/job.json: OK
+objects/job_action.json: OK
+objects/job_trigger.json: OK
+objects/kb_article.json: OK
+objects/kernel.json: OK
+objects/kernel_driver.json: OK
+objects/key_value_object.json: OK
+objects/keyboard_info.json: OK
+objects/kill_chain_phase.json: OK
+objects/ldap_person.json: OK
+objects/load_balancer.json: OK
+objects/location.json: OK
+objects/logger.json: OK
+objects/long_string.json: OK
+objects/malware.json: OK
+objects/malware_scan_info.json: OK
+objects/managed_entity.json: OK
+objects/message_context.json: OK
+objects/metadata.json: OK
+objects/metric.json: OK
+objects/mitigation.json: OK
+objects/module.json: OK
+objects/network_connection_info.json: OK
+objects/network_endpoint.json: OK
+objects/network_interface.json: OK
+objects/network_proxy.json: OK
+objects/network_traffic.json: OK
+objects/node.json: OK
+objects/note.json: OK
+objects/object.json: OK
+objects/observable.json: OK
+objects/observation.json: OK
+objects/occurrence_details.json: OK
+objects/organization.json: OK
+objects/os.json: OK
+objects/osint.json: OK
+objects/package.json: OK
+objects/packet.json: OK
+objects/parameter.json: OK
+objects/peripheral_device.json: OK
+objects/permission_analysis_result.json: OK
+objects/policy.json: OK
+objects/port_info.json: OK
+objects/prev_event.json: OK
+objects/privilege_attack_info.json: OK
+objects/privilege_info.json: OK
+objects/process.json: OK
+objects/process_entity.json: OK
+objects/product.json: OK
+objects/programmatic_credential.json: OK
+objects/query_evidence.json: OK
+objects/query_info.json: OK
+objects/related_event.json: OK
+objects/remediation.json: OK
+objects/reporter.json: OK
+objects/reputation.json: OK
+objects/request.json: OK
+objects/resource_details.json: OK
+objects/response.json: OK
+objects/rpc_interface.json: OK
+objects/rule.json: OK
+objects/san.json: OK
+objects/sbom.json: OK
+objects/scan.json: OK
+objects/scim.json: OK
+objects/script.json: OK
+objects/security_state.json: OK
+objects/sensor_info.json: OK
+objects/service.json: OK
+objects/service_privilege_analysis.json: OK
+objects/session.json: OK
+objects/software_component.json: OK
+objects/span.json: OK
+objects/sso.json: OK
+objects/startup_item.json: OK
+objects/sub_technique.json: OK
+objects/table.json: OK
+objects/tactic.json: OK
+objects/technique.json: OK
+objects/threat_actor.json: OK
+objects/ticket.json: OK
+objects/timespan.json: OK
+objects/tls.json: OK
+objects/tls_extension.json: OK
+objects/token.json: OK
+objects/trace.json: OK
+objects/trait.json: OK
+objects/transformation_info.json: OK
+objects/tsig.json: OK
+objects/unmanned_aerial_system.json: OK
+objects/unmanned_system_operating_area.json: OK
+objects/url.json: OK
+objects/user.json: OK
+objects/vendor_attributes.json: OK
+objects/vulnerability.json: OK
+objects/web_resource.json: OK
+objects/whois.json: OK
+profiles/ai_operation.json: OK
+profiles/cloud.json: OK
+profiles/container.json: OK
+profiles/data_classification.json: OK
+profiles/datetime.json: OK
+profiles/host.json: OK
+profiles/incident.json: OK
+profiles/load_balancer.json: OK
+profiles/network_proxy.json: OK
+profiles/osint.json: OK
+profiles/record_integrity.json: OK
+profiles/security_control.json: OK
+profiles/trace.json: OK
+templates/event_class_name.json: OK
+templates/object_name.json: OK
+version.json: OK
+OCSF 1.9.0 vendor checksums verified
+PASS  JSON Schema positive/negative examples
+verified 15 fixture occurrences, 15 raw files, 14 required scenarios, and 1 byte-identical occurrence group
+PASS  Synthetic corpus hashes, coverage, provenance, and ground truth
+go test ./internal/auth ./internal/ingress ./internal/interpret/re2parser ./internal/registry ./internal/securitytest -count=1 -run '^(Fuzz|TestSecurity|TestPermissionMatrix|TestLoaderRejectsTraversalAndSymlinks|TestPathologicalPatternCompletesWithoutBacktracking|TestHTTPRejectsOversizeWithoutDurableWrites|TestUDPListenerRejectsOversizeAndAccountsForTruncation)'
+ok  	github.com/sidd20228/universal_log_framework/internal/auth	0.625s
+ok  	github.com/sidd20228/universal_log_framework/internal/ingress	1.128s
+ok  	github.com/sidd20228/universal_log_framework/internal/interpret/re2parser	2.211s
+ok  	github.com/sidd20228/universal_log_framework/internal/registry	1.654s
+ok  	github.com/sidd20228/universal_log_framework/internal/securitytest	2.731s
+PASS  Bounded security regression smoke
+container policy: static checks passed
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.93kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 295B done
+#4 DONE 0.0s
+
+#5 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#5 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab done
+#5 DONE 0.0s
+
+#6 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#6 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 11.38kB 0.0s done
+#7 DONE 0.0s
+
+#8 [build 4/8] RUN go mod download
+#8 CACHED
+
+#9 [build 7/8] COPY migrations/ ./migrations/
+#9 CACHED
+
+#10 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
+#10 CACHED
+
+#11 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
+#11 CACHED
+
+#12 [build 5/8] COPY cmd/ ./cmd/
+#12 CACHED
+
+#13 [build 8/8] RUN test -n "arm64" &&     GOOS="linux" GOARCH="arm64"     go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.version=dev -X main.commit=unknown -X main.buildDate=1970-01-01T00:00:00Z"       -o /out/ulpf ./cmd/ulpf &&     install -d -m 0700       /runtime/var/lib/ulpf/raw       /runtime/var/lib/ulpf/state       /runtime/var/lib/ulpf/bundles       /runtime/var/lib/ulpf/tmp
+#13 CACHED
+
+#14 [build 2/8] WORKDIR /src
+#14 CACHED
+
+#15 [build 6/8] COPY internal/ ./internal/
+#15 CACHED
+
+#16 [build 3/8] COPY go.mod go.sum ./
+#16 CACHED
+
+#17 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
+#17 CACHED
+
+#18 [stage-1 5/5] WORKDIR /var/lib/ulpf
+#18 CACHED
+
+#19 exporting to image
+#19 exporting layers done
+#19 exporting manifest sha256:38321426516f49a63ecf5571d8a87a6142fe391eecb415ca8163151bcaef57b8 done
+#19 exporting config sha256:25a1cfff677b71b7796825e575b5040c5d6569b25116373a34493d96f34f7bf7 done
+#19 exporting attestation manifest sha256:870df5290053dda3f0d624f0eddf8a3594494205eb33eecff4e2e3cc53e09bb3 done
+#19 exporting manifest list sha256:65da5ceb4e92fd0e2d89d1add73e9dc498071c08da7464007d5782c0a69dfcb5 done
+#19 naming to docker.io/library/ulpf-container-policy:local-45233 done
+#19 unpacking to docker.io/library/ulpf-container-policy:local-45233 done
+#19 DONE 0.0s
+container policy: runtime checks passed with docker
+container policy test: success and rejection cases passed
+PASS  Container static success and rejection policy
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/first.tar
+sha256: cda59a56ec260ce283b7997ac94286dbdbf6812e655eb151dec735372efbb60c
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/second.tar
+sha256: cda59a56ec260ce283b7997ac94286dbdbf6812e655eb151dec735372efbb60c
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/first.tar.zst
+sha256: b3aaffa838db1f8ffc33342c8de98cbad13c15cd8c4290858d44b664fbec53a9
+offline bundle created: /var/folders/qb/4b6wl0p519jf1_v_rdm6lt100000gn/T/tmp.HbUgnQ5pgI/second.tar.zst
+sha256: b3aaffa838db1f8ffc33342c8de98cbad13c15cd8c4290858d44b664fbec53a9
+offline bundle verified: version=1.2.3 architecture=amd64 artifacts=11 sidecar=yes
+offline bundle tests passed
+PASS  Offline archive determinism and hostile archive rejection
+ Image ulpf:local Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 581B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.93kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#3 DONE 0.0s
+
+#4 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#4 DONE 0.0s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 295B done
+#5 DONE 0.0s
+
+#6 [build 1/8] FROM docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c
+#6 resolve docker.io/library/golang:1.24.0-alpine3.21@sha256:2d40d4fc278dad38be0777d5e2a88a2c6dee51b0b29c97a764fc6c6a11ca893c 0.0s done
+#6 DONE 0.0s
+
+#7 [stage-1 1/5] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+#7 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab 0.0s done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 11.38kB done
+#8 DONE 0.0s
+
+#9 [build 5/8] COPY cmd/ ./cmd/
+#9 CACHED
+
+#10 [build 6/8] COPY internal/ ./internal/
+#10 CACHED
+
+#11 [build 8/8] RUN test -n "arm64" &&     GOOS="linux" GOARCH="arm64"     go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.version=dev -X main.commit=unknown -X main.buildDate=1970-01-01T00:00:00Z"       -o /out/ulpf ./cmd/ulpf &&     install -d -m 0700       /runtime/var/lib/ulpf/raw       /runtime/var/lib/ulpf/state       /runtime/var/lib/ulpf/bundles       /runtime/var/lib/ulpf/tmp
+#11 CACHED
+
+#12 [build 7/8] COPY migrations/ ./migrations/
+#12 CACHED
+
+#13 [stage-1 3/5] COPY --from=build --chown=65532:65532 /runtime/ /
+#13 CACHED
+
+#14 [stage-1 2/5] COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
+#14 CACHED
+
+#15 [build 3/8] COPY go.mod go.sum ./
+#15 CACHED
+
+#16 [build 2/8] WORKDIR /src
+#16 CACHED
+
+#17 [stage-1 4/5] COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
+#17 CACHED
+
+#18 [build 4/8] RUN go mod download
+#18 CACHED
+
+#19 [stage-1 5/5] WORKDIR /var/lib/ulpf
+#19 CACHED
+
+#20 exporting to image
+#20 exporting layers done
+#20 exporting manifest sha256:09f0e78d1155a50b3479d47065262c96c622d25b2a18d5ce0afa6d98a6c73935 done
+#20 exporting config sha256:34e019caa0ec2baf5cd1997a5281af581b3b5f969a84ac2fcef7df5c7c7fb2e3 done
+#20 exporting attestation manifest sha256:61c4b729d3a14088d0506c7be79eb7490b93ebb402d1044a7b0c2ebd1d8c5413 done
+#20 exporting manifest list sha256:d7fa4abffc6f0eb6a5ac91aa6bc7412eb6d4e206698819530524e41e6bb1daab done
+#20 naming to docker.io/library/ulpf:local done
+#20 unpacking to docker.io/library/ulpf:local done
+#20 DONE 0.0s
+
+#21 resolving provenance for metadata file
+#21 DONE 0.0s
+ Image ulpf:local Built
+ Container ulpf-clickhouse-1 Recreate
+ Container ulpf-clickhouse-1 Recreated
+ Container ulpf-ulpf-1 Recreate
+ Container ulpf-ulpf-1 Recreated
+ Container ulpf-clickhouse-1 Starting
+ Container ulpf-clickhouse-1 Started
+ Container ulpf-clickhouse-1 Waiting
+ Container ulpf-clickhouse-1 Healthy
+ Container ulpf-ulpf-1 Starting
+ Container ulpf-ulpf-1 Started
+ Container ulpf-ulpf-1 Waiting
+ Container ulpf-clickhouse-1 Waiting
+ Container ulpf-clickhouse-1 Healthy
+ Container ulpf-ulpf-1 Healthy
+compose smoke: healthy admission-to-query path verified
+PASS  Docker engine-backed Compose smoke
+LIMIT  No isolated egress-denied target run is recorded; offline evidence covers deterministic assembly, verification, and safe extraction only
+LIMIT  No production-scale, sustained, replicated, Parquet, retention, disk-watermark, or backup/restore result is claimed
+SUMMARY passes=29 failures=0 pending=0 limits=2
+report=output/evaluation/verification.txt

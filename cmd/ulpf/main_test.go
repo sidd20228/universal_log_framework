@@ -22,6 +22,11 @@ func TestVersionCommand(t *testing.T) {
 func TestValidateConfigCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ulpf.yaml")
 	body := `config_version: ulpf-config/1
+deployment:
+  environment_id: test
+  instance_id: node-a
+  tenant_id: test
+  api_token_ref: env:ULPF_TEST_TOKEN
 listeners:
   - id: http-8080
     kind: http
@@ -34,11 +39,13 @@ processing:
   ambiguity_margin: 0.1
 storage:
   raw_root: /tmp/ulpf/raw
+  sqlite_path: /tmp/ulpf/state/ulpf.sqlite
   high_watermark_percent: 85
 retention:
   raw_days: 7
 connectors: []
 `
+	t.Setenv("ULPF_TEST_TOKEN", "test-token-000000000000000000000001")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -82,5 +89,27 @@ func TestLoadAPITokenFromFileAndRejectsAmbiguousSources(t *testing.T) {
 	t.Setenv("ULPF_API_TOKEN", "environment-token-000000000000001")
 	if _, err := loadAPIToken(path); err == nil || strings.Contains(err.Error(), secret) {
 		t.Fatalf("ambiguous secret error = %v", err)
+	}
+}
+
+func TestBundleValidateAndInstallCommands(t *testing.T) {
+	bundle := filepath.Join("..", "..", "bundles", "reference", "json-firewall")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"bundle", "validate", "--json", bundle}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), `"status":"valid"`) {
+		t.Fatalf("bundle validate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	root := t.TempDir()
+	t.Cleanup(func() {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err == nil {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"bundle", "install", "--sqlite", filepath.Join(root, "state.sqlite"), "--catalog", filepath.Join(root, "catalog"), bundle}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), `"bundle_id":"reference-json-firewall"`) {
+		t.Fatalf("bundle install code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
 }

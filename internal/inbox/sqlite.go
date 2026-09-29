@@ -165,11 +165,11 @@ func (store *SQLiteStore) InsertReceipt(ctx context.Context, receipt model.Recei
 		peerPort = receipt.Peer.Port
 	}
 	_, err = store.db.ExecContext(ctx, `INSERT INTO receipts (
-receipt_id, tenant_id, received_at_ns, listener_id, transport, source_profile_id,
+receipt_id, tenant_id, environment_id, instance_id, received_at_ns, listener_id, transport, source_profile_id,
 peer_ip, peer_port, framing_json, raw_ref, raw_sha256, raw_size,
 raw_encoding_hint, raw_compression, raw_available, state
-) VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
-		receipt.ID, receipt.TenantID, receipt.ReceivedAt.UnixNano(), receipt.ListenerID, receipt.Transport,
+) VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?)`,
+		receipt.ID, receipt.TenantID, receipt.EnvironmentID, receipt.InstanceID, receipt.ReceivedAt.UnixNano(), receipt.ListenerID, receipt.Transport,
 		receipt.SourceProfileID, peerIP, peerPort, string(framing), receipt.Raw.Ref, receipt.Raw.SHA256,
 		receipt.Raw.SizeBytes, receipt.Raw.EncodingHint, receipt.Raw.Compression, receipt.Raw.Available, receipt.State,
 	)
@@ -525,7 +525,7 @@ func scanRevision(row rowScanner) (model.Revision, error) {
 }
 
 const receiptSelect = `SELECT
-receipt_id, tenant_id, received_at_ns, listener_id, transport, source_profile_id,
+receipt_id, tenant_id, environment_id, instance_id, received_at_ns, listener_id, transport, source_profile_id,
 peer_ip, peer_port, framing_json, raw_ref, raw_sha256, raw_size,
 raw_encoding_hint, raw_compression, raw_available, state,
 lease_owner, lease_until_ns, attempts, last_error_code
@@ -534,6 +534,8 @@ FROM receipts`
 func scanRecord(row rowScanner) (Record, error) {
 	var record Record
 	var receivedAt int64
+	var environmentID sql.NullString
+	var instanceID sql.NullString
 	var sourceProfile sql.NullString
 	var peerIP sql.NullString
 	var peerPort sql.NullInt64
@@ -545,7 +547,7 @@ func scanRecord(row rowScanner) (Record, error) {
 	var leaseUntil sql.NullInt64
 	var lastError sql.NullString
 	if err := row.Scan(
-		&record.Receipt.ID, &record.Receipt.TenantID, &receivedAt, &record.Receipt.ListenerID,
+		&record.Receipt.ID, &record.Receipt.TenantID, &environmentID, &instanceID, &receivedAt, &record.Receipt.ListenerID,
 		&record.Receipt.Transport, &sourceProfile, &peerIP, &peerPort, &framingJSON,
 		&record.Receipt.Raw.Ref, &record.Receipt.Raw.SHA256, &record.Receipt.Raw.SizeBytes,
 		&encodingHint, &compression, &rawAvailable, &record.Receipt.State,
@@ -557,6 +559,8 @@ func scanRecord(row rowScanner) (Record, error) {
 		return Record{}, fmt.Errorf("scan receipt: %w", err)
 	}
 	record.Receipt.ReceivedAt = time.Unix(0, receivedAt).UTC()
+	record.Receipt.EnvironmentID = environmentID.String
+	record.Receipt.InstanceID = instanceID.String
 	record.Receipt.SourceProfileID = sourceProfile.String
 	record.Receipt.Raw.EncodingHint = encodingHint.String
 	record.Receipt.Raw.Compression = compression.String

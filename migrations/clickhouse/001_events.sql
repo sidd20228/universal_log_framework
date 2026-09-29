@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS ulpf.events
     receipt_id String,
     revision_id String,
     tenant_id LowCardinality(String),
+    environment_id LowCardinality(String),
+    instance_id LowCardinality(String),
     received_at DateTime64(6, 'UTC'),
     event_time Nullable(DateTime64(6, 'UTC')),
     source_profile_id LowCardinality(String),

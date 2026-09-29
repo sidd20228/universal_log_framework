@@ -54,6 +54,8 @@ const (
 type Receipt struct {
 	ID              string       `json:"id"`
 	TenantID        string       `json:"tenant_id"`
+	EnvironmentID   string       `json:"environment_id,omitempty"`
+	InstanceID      string       `json:"instance_id,omitempty"`
 	ReceivedAt      time.Time    `json:"received_at"`
 	ListenerID      string       `json:"listener_id"`
 	Transport       Transport    `json:"transport"`
@@ -71,6 +73,9 @@ func (receipt Receipt) Validate() error {
 	}
 	if strings.TrimSpace(receipt.TenantID) == "" {
 		problems = append(problems, errors.New("tenant id is required"))
+	}
+	if (receipt.EnvironmentID == "") != (receipt.InstanceID == "") {
+		problems = append(problems, errors.New("environment and instance ids must be supplied together"))
 	}
 	if receipt.ReceivedAt.IsZero() {
 		problems = append(problems, errors.New("received_at is required"))

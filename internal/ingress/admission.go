@@ -25,6 +25,8 @@ type Admission interface {
 type AdmissionRequest struct {
 	Payload         io.Reader
 	TenantID        string
+	EnvironmentID   string
+	InstanceID      string
 	ListenerID      string
 	SourceProfileID string
 	Peer            *model.Peer
@@ -153,6 +155,8 @@ func (coordinator *Coordinator) Admit(ctx context.Context, request AdmissionRequ
 	receipt := model.Receipt{
 		ID:              receiptID,
 		TenantID:        request.TenantID,
+		EnvironmentID:   request.EnvironmentID,
+		InstanceID:      request.InstanceID,
 		ReceivedAt:      receivedAt,
 		ListenerID:      request.ListenerID,
 		Transport:       transport,

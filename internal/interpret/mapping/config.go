@@ -1,14 +1,10 @@
 package mapping
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -21,31 +17,50 @@ type targetKind uint8
 
 const (
 	targetString targetKind = iota + 1
-	targetInteger
+	targetString64
+	targetString128
+	targetString255
+	targetString512
+	targetNonNegativeInteger
+	targetSeverityID
+	targetProtocolNumber
 	targetIP
 	targetPort
 	targetTimestamp
 	targetAction
 	targetDevice
+	targetSeverity
 	targetProtocol
+	targetMAC
+	targetExtension
 )
 
 var allowedTargets = map[string]targetKind{
-	"event.class_uid":                     targetInteger,
-	"event.class_name":                    targetString,
-	"event.activity_id":                   targetInteger,
-	"event.activity":                      targetString,
+	"event.class_uid":                     targetNonNegativeInteger,
+	"event.class_name":                    targetString128,
+	"event.activity_id":                   targetNonNegativeInteger,
+	"event.activity":                      targetString128,
 	"event.time":                          targetTimestamp,
 	"event.action":                        targetAction,
-	"event.severity_id":                   targetInteger,
+	"event.status":                        targetString64,
+	"event.severity_id":                   targetSeverityID,
+	"event.severity":                      targetSeverity,
 	"event.src_endpoint.ip":               targetIP,
 	"event.src_endpoint.port":             targetPort,
+	"event.src_endpoint.hostname":         targetString255,
+	"event.src_endpoint.mac":              targetMAC,
 	"event.dst_endpoint.ip":               targetIP,
 	"event.dst_endpoint.port":             targetPort,
+	"event.dst_endpoint.hostname":         targetString255,
+	"event.dst_endpoint.mac":              targetMAC,
 	"event.connection_info.protocol_name": targetProtocol,
+	"event.connection_info.protocol_num":  targetProtocolNumber,
 	"event.device.type":                   targetDevice,
-	"event.finding.signature":             targetString,
-	"event.finding.signature_id":          targetInteger,
+	"event.device.hostname":               targetString255,
+	"event.device.vendor_name":            targetString128,
+	"event.device.product_name":           targetString128,
+	"event.finding.signature":             targetString512,
+	"event.finding.signature_id":          targetNonNegativeInteger,
 }
 
 var allowedActions = map[string]struct{}{
@@ -58,32 +73,16 @@ var allowedDeviceTypes = map[string]struct{}{
 	"proxy": {}, "vpn": {}, "unknown": {},
 }
 
+var allowedSeverities = map[string]struct{}{
+	"unknown": {}, "informational": {}, "low": {}, "medium": {}, "high": {}, "critical": {},
+}
+
 func LoadConfig(encoded []byte) (*Engine, error) {
-	if len(encoded) > maxConfigSize {
-		return nil, fmt.Errorf("mapping config exceeds %d bytes", maxConfigSize)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	var config Config
-	if err := decoder.Decode(&config); err != nil {
-		return nil, fmt.Errorf("decode mapping config: %w", err)
-	}
-	if err := requireJSONEOF(decoder); err != nil {
+	config, err := decodeConfig(encoded)
+	if err != nil {
 		return nil, err
 	}
 	return New(config)
-}
-
-func requireJSONEOF(decoder *json.Decoder) error {
-	var trailing any
-	err := decoder.Decode(&trailing)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("decode trailing mapping config: %w", err)
-	}
-	return errors.New("mapping config contains more than one JSON value")
 }
 
 func New(config Config) (*Engine, error) {
@@ -152,7 +151,7 @@ func validateRule(rule Rule, taxonomies map[string]map[string]string) error {
 	if !validSourcePath(rule.From) {
 		return fmt.Errorf("invalid explicit source path %q", rule.From)
 	}
-	kind, allowed := allowedTargets[rule.To]
+	kind, allowed := targetForPath(rule.To)
 	if !allowed {
 		return fmt.Errorf("target %q is not allowlisted", rule.To)
 	}
@@ -210,14 +209,16 @@ func validateTargetConversion(kind targetKind, rule Rule) error {
 		allowed = (rule.Convert == ConvertPort || rule.Convert == ConvertUint16) && rule.Lookup == ""
 	case targetTimestamp:
 		allowed = rule.Convert == ConvertTimestamp && rule.Lookup == ""
-	case targetInteger:
+	case targetNonNegativeInteger, targetSeverityID, targetProtocolNumber:
 		allowed = rule.Convert == ConvertInteger || rule.Lookup != ""
-	case targetAction, targetDevice:
+	case targetAction, targetDevice, targetSeverity:
 		allowed = rule.Convert == ConvertLowercase && rule.Lookup != ""
 	case targetProtocol:
 		allowed = rule.Convert == ConvertLowercase
-	case targetString:
+	case targetString, targetString64, targetString128, targetString255, targetString512, targetMAC:
 		allowed = rule.Convert == ConvertString || rule.Convert == ConvertLowercase || rule.Lookup != ""
+	case targetExtension:
+		allowed = validConversion(rule.Convert)
 	}
 	if !allowed {
 		return fmt.Errorf("conversion %q and lookup %q do not satisfy target %q", rule.Convert, rule.Lookup, rule.To)
@@ -280,21 +281,30 @@ func configCanonicalValues(reverse map[string]string) map[string]struct{} {
 }
 
 func validateCanonical(kind targetKind, value string) error {
-	switch kind {
-	case targetInteger:
-		if _, err := strconv.ParseInt(value, 10, 64); err != nil {
-			return errors.New("must be a base-10 int64")
-		}
-	case targetAction:
-		if _, ok := allowedActions[value]; !ok {
-			return errors.New("is outside the action vocabulary")
-		}
-	case targetDevice:
-		if _, ok := allowedDeviceTypes[value]; !ok {
-			return errors.New("is outside the device-type vocabulary")
-		}
+	if _, err := coerceTarget(kind, value); err != nil {
+		return err
 	}
 	return nil
+}
+
+func targetForPath(value string) (targetKind, bool) {
+	if kind, found := allowedTargets[value]; found {
+		return kind, true
+	}
+	const prefix = "event.extensions."
+	if !strings.HasPrefix(value, prefix) || len(value) > 512 {
+		return 0, false
+	}
+	parts := strings.Split(strings.TrimPrefix(value, prefix), ".")
+	if len(parts) == 0 || len(parts) > 64 {
+		return 0, false
+	}
+	for _, part := range parts {
+		if !identifierPattern.MatchString(part) {
+			return 0, false
+		}
+	}
+	return targetExtension, true
 }
 
 func validSourcePath(path string) bool {

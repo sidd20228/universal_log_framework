@@ -14,9 +14,9 @@ import tarfile
 import tempfile
 
 
-MANIFEST_VERSION = "ulpf-offline-bundle/1.0.0"
+MANIFEST_VERSION = "ulpf-offline-bundle/1.1.0"
 REQUIRED_ROLES = {
-    "image.ulpf", "image.clickhouse", "image.prometheus", "compose", "config",
+    "image.ulpf", "image.clickhouse", "compose", "config", "migration.clickhouse",
     "documentation", "license", "schema", "verifier",
 }
 ALLOWED_ROLES = REQUIRED_ROLES | {"sbom", "vulnerability_report", "notice", "signature"}
@@ -24,7 +24,9 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 ROOT_PATTERN = re.compile(r"^ulpf-offline-([0-9A-Za-z][0-9A-Za-z.+_-]{0,127})-(amd64|arm64)$")
 MAX_MEMBERS = 200_000
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+MAX_IMAGE_JSON_BYTES = 4 * 1024 * 1024
 MAX_ARCHIVE_BYTES = int(os.environ.get("ULPF_OFFLINE_MAX_ARCHIVE_BYTES", str(32 * 1024 * 1024 * 1024)))
+IMAGE_TAG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})$")
 
 
 class VerificationError(Exception):
@@ -42,6 +44,13 @@ def reject_duplicate_keys(pairs):
             fail(f"manifest contains duplicate key {key!r}")
         result[key] = value
     return result
+
+
+def decode_json(body, label):
+    try:
+        return json.loads(body.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(f"{label} is not strict UTF-8 JSON: {error}")
 
 
 def safe_member_name(name):
@@ -260,9 +269,9 @@ def parse_manifest(body, root, version, architecture):
     required_paths = {
         f"images/ulpf-{architecture}.tar": "image.ulpf",
         f"images/clickhouse-{architecture}.tar": "image.clickhouse",
-        f"images/prometheus-{architecture}.tar": "image.prometheus",
         "compose/compose.yaml": "compose",
         "config/ulpf.yaml": "config",
+        "migrations/clickhouse/001_events.sql": "migration.clickhouse",
         "licenses/LICENSE": "license",
         "licenses/OCSF-LICENSE": "license",
         "install/verify-offline-bundle.py": "verifier",
@@ -270,7 +279,7 @@ def parse_manifest(body, root, version, architecture):
     for path, role in required_paths.items():
         if path not in parsed or parsed[path]["role"] != role:
             fail(f"manifest is missing required {role!r} artifact at {path!r}")
-    for role in ("image.ulpf", "image.clickhouse", "image.prometheus", "compose", "config", "verifier"):
+    for role in ("image.ulpf", "image.clickhouse", "compose", "config", "migration.clickhouse", "verifier"):
         if sum(item["role"] == role for item in parsed.values()) != 1:
             fail(f"manifest must contain exactly one {role!r} artifact")
     if parsed["install/verify-offline-bundle.py"]["mode"] != "0755":
@@ -314,7 +323,7 @@ def parse_checksums(body):
     return checksums
 
 
-def verify_payload(archive, root, members, artifacts, checksums):
+def verify_payload(archive, root, members, artifacts, checksums, version, architecture):
     regular = {
         PurePosixPath(name).relative_to(root).as_posix(): member
         for name, member in members.items()
@@ -340,6 +349,7 @@ def verify_payload(archive, root, members, artifacts, checksums):
     expected_checksums = set(artifacts) | {"manifest.json"}
     if set(checksums) != expected_checksums:
         fail("SHA256SUMS coverage does not match the manifest")
+    image_tags = {}
     for relative in sorted(expected_checksums):
         member = regular[relative]
         stream = archive.extractfile(member)
@@ -355,15 +365,35 @@ def verify_payload(archive, root, members, artifacts, checksums):
             if member.mode != int(artifact["mode"], 8):
                 fail(f"archive mode does not match manifest for {relative!r}")
             if artifact["role"].startswith("image."):
-                verify_image_archive(archive, member, relative)
+                role = artifact["role"][len("image."):]
+                image_tags[role] = verify_image_archive(
+                    archive, member, relative, architecture, role, version
+                )
+    compose_member = regular["compose/compose.yaml"]
+    verify_release_compose(read_member(archive, compose_member, MAX_MANIFEST_BYTES), image_tags)
 
 
-def verify_image_archive(archive, member, relative):
+def valid_image_tag(role, tag, version):
+    if not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag):
+        fail(f"container image {role!r} has invalid Docker tag {tag!r}")
+    repository, image_version = tag.rsplit(":", 1)
+    repository_without_registry = repository.rsplit("/", 1)[-1]
+    if role == "ulpf":
+        if repository_without_registry != "ulpf" or image_version != version:
+            fail(f"ulpf image must have the release tag ulpf:{version}, found {tag!r}")
+    elif role == "clickhouse":
+        if not repository.endswith("clickhouse/clickhouse-server") or image_version == "latest":
+            fail("clickhouse image must use a versioned clickhouse/clickhouse-server tag")
+    return tag
+
+
+def verify_image_archive(archive, member, relative, architecture, role, version):
     stream = archive.extractfile(member)
     if stream is None:
         fail(f"cannot read container image archive {relative!r}")
-    names = set()
-    regular_names = set()
+    members = {}
+    bodies = {}
+    digests = {}
     declared_total = 0
     try:
         with tarfile.open(fileobj=stream, mode="r|*") as image_archive:
@@ -371,22 +401,95 @@ def verify_image_archive(archive, member, relative):
                 if index >= MAX_MEMBERS:
                     fail(f"container image archive {relative!r} contains too many members")
                 nested_path = safe_member_name(nested.name).as_posix()
-                if nested_path in names:
+                if nested_path in members:
                     fail(f"container image archive {relative!r} contains duplicate path {nested_path!r}")
-                names.add(nested_path)
                 if not (nested.isdir() or nested.isreg()):
                     fail(f"container image archive {relative!r} contains a link or special file")
+                members[nested_path] = nested
                 if nested.isreg():
-                    regular_names.add(nested_path)
                     declared_total += nested.size
                     if declared_total > MAX_ARCHIVE_BYTES:
                         fail(f"container image archive {relative!r} exceeds the configured size limit")
+                    nested_stream = image_archive.extractfile(nested)
+                    if nested_stream is None:
+                        fail(f"cannot read container image member {nested_path!r}")
+                    digest = hashlib.sha256()
+                    body = bytearray() if nested_path == "manifest.json" or nested_path.endswith(".json") else None
+                    while True:
+                        chunk = nested_stream.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        digest.update(chunk)
+                        if body is not None:
+                            if len(body) + len(chunk) > MAX_IMAGE_JSON_BYTES:
+                                fail(f"container image JSON member {nested_path!r} is too large")
+                            body.extend(chunk)
+                    digests[nested_path] = digest.hexdigest()
+                    if body is not None:
+                        bodies[nested_path] = bytes(body)
     except tarfile.TarError as error:
         fail(f"container image artifact {relative!r} is not a tar archive: {error}")
-    docker_layout = "manifest.json" in regular_names
-    oci_layout = "oci-layout" in regular_names and "index.json" in regular_names
-    if not docker_layout and not oci_layout:
-        fail(f"container image archive {relative!r} is neither Docker-save nor OCI layout")
+    manifest_body = bodies.get("manifest.json")
+    if manifest_body is None:
+        fail(f"container image archive {relative!r} is not a Docker-save archive")
+    manifest = decode_json(manifest_body, f"container image {role!r} manifest.json")
+    if not isinstance(manifest, list) or len(manifest) != 1 or not isinstance(manifest[0], dict):
+        fail(f"container image {role!r} must contain exactly one manifest entry")
+    entry = manifest[0]
+    if set(entry) != {"Config", "RepoTags", "Layers"}:
+        fail(f"container image {role!r} manifest entry has missing or unknown fields")
+    config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
+    if not isinstance(config_name, str) or not re.fullmatch(r"[0-9a-f]{64}\.json", config_name):
+        fail(f"container image {role!r} has an invalid content-addressed config path")
+    if not isinstance(tags, list) or len(tags) != 1:
+        fail(f"container image {role!r} must contain exactly one repository tag")
+    tag = valid_image_tag(role, tags[0], version)
+    if not isinstance(layers, list) or not layers or not all(isinstance(item, str) for item in layers) or len(set(layers)) != len(layers):
+        fail(f"container image {role!r} has an invalid or duplicate layer list")
+    config_body = bodies.get(config_name)
+    if config_body is None or config_name not in members or not members[config_name].isreg():
+        fail(f"container image {role!r} config is missing")
+    if hashlib.sha256(config_body).hexdigest() != config_name[:-5]:
+        fail(f"container image {role!r} config digest does not match its filename")
+    config = decode_json(config_body, f"container image {role!r} config")
+    if not isinstance(config, dict) or config.get("os") != "linux" or config.get("architecture") != architecture:
+        fail(f"container image {role!r} config must target linux/{architecture}")
+    rootfs = config.get("rootfs")
+    diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, dict) and rootfs.get("type") == "layers" else None
+    if not isinstance(diff_ids, list) or len(diff_ids) != len(layers) or not all(isinstance(item, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", item) for item in diff_ids):
+        fail(f"container image {role!r} rootfs diff_ids must match the layer count")
+    for index, layer_name in enumerate(layers):
+        canonical = safe_member_name(layer_name).as_posix()
+        layer = members.get(canonical)
+        actual = digests.get(canonical)
+        if layer is None or not layer.isreg() or actual is None:
+            fail(f"container image {role!r} referenced layer {canonical!r} is missing")
+        if canonical.endswith("/layer.tar") and diff_ids[index] != "sha256:" + actual:
+            fail(f"container image {role!r} layer {canonical!r} does not match rootfs diff_id")
+        blob_match = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", canonical)
+        if blob_match is not None and blob_match.group(1) != actual:
+            fail(f"container image {role!r} blob {canonical!r} does not match its content digest")
+    return tag
+
+
+def verify_release_compose(body, image_tags):
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        fail("offline Compose file is not UTF-8")
+    if "__ULPF_IMAGE__" in text or "__CLICKHOUSE_IMAGE__" in text:
+        fail("offline Compose still contains an unrendered image marker")
+    if re.search(r"(?m)^\s*build\s*:", text):
+        fail("offline Compose must not contain a build directive")
+    references = re.findall(r"(?m)^\s*image\s*:\s*([^\s#]+)\s*$", text)
+    expected = [image_tags["ulpf"], image_tags["clickhouse"]]
+    if sorted(references) != sorted(expected) or len(references) != len(expected):
+        fail("offline Compose image references do not match the packaged image tags")
+    if len(re.findall(r"(?m)^\s*pull_policy\s*:\s*never\s*$", text)) != len(expected):
+        fail("offline Compose must set pull_policy: never for every image service")
+    migration_mount = "../migrations/clickhouse/001_events.sql:/docker-entrypoint-initdb.d/001_events.sql:ro"
+    if migration_mount not in text:
+        fail("offline Compose does not mount the packaged ClickHouse migration")
 
 
 def extract_verified(archive, root, members, artifacts, checksums, destination):
@@ -424,10 +527,12 @@ def extract_verified(archive, root, members, artifacts, checksums, destination):
             shutil.rmtree(temporary, ignore_errors=True)
 
 
-def verify_archive(archive_path, extract_to=None):
+def verify_archive(archive_path, extract_to=None, test_mode=False):
     if archive_path.is_symlink() or not archive_path.is_file():
         fail("archive must be a regular, non-symlink file")
     sidecar_verified = verify_sidecar(archive_path)
+    if not sidecar_verified and not test_mode:
+        fail("archive checksum sidecar is required; --test-mode is only for repository fixtures")
     with tempfile.TemporaryDirectory(prefix="ulpf-offline-verify-") as temporary:
         tar_path = materialize_tar(archive_path, temporary)
         try:
@@ -445,7 +550,7 @@ def verify_archive(archive_path, extract_to=None):
             manifest_body = read_member(archive, members[manifest_name], MAX_MANIFEST_BYTES)
             _, artifacts = parse_manifest(manifest_body, root, version, architecture)
             checksums = parse_checksums(read_member(archive, members[checksums_name], MAX_MANIFEST_BYTES))
-            verify_payload(archive, root, members, artifacts, checksums)
+            verify_payload(archive, root, members, artifacts, checksums, version, architecture)
             if extract_to is not None:
                 extract_verified(archive, root, members, artifacts, checksums, extract_to)
     print(
@@ -458,11 +563,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive")
     parser.add_argument("--extract", metavar="DIRECTORY")
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="allow a missing outer checksum sidecar for repository fixtures only",
+    )
     args = parser.parse_args()
     try:
         archive = Path(os.path.abspath(os.path.expanduser(args.archive)))
         extract_to = Path(os.path.abspath(os.path.expanduser(args.extract))) if args.extract else None
-        verify_archive(archive, extract_to)
+        verify_archive(archive, extract_to, args.test_mode)
     except (VerificationError, OSError, tarfile.TarError) as error:
         print(f"offline bundle verification failed: {error}", file=sys.stderr)
         return 1

@@ -39,6 +39,8 @@ type Envelope struct {
 type Receipt struct {
 	ID              string          `json:"id"`
 	TenantID        string          `json:"tenant_id"`
+	EnvironmentID   string          `json:"environment_id,omitempty"`
+	InstanceID      string          `json:"instance_id,omitempty"`
 	ReceivedAt      time.Time       `json:"received_at"`
 	ListenerID      string          `json:"listener_id"`
 	Transport       model.Transport `json:"transport"`

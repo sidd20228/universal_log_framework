@@ -1,0 +1,46 @@
+{
+  "contract_version": "ulpf-dataset-manifest/1.0.0",
+  "dataset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "tenant_id": "tenant-a",
+  "envelope_schema_version": "ulpf-envelope/1.0.0",
+  "feature_set": {
+    "id": "network-risk",
+    "version": "1.0.0",
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "selection": {
+    "received_from": "2026-09-29T00:00:00Z",
+    "received_to": "2026-09-30T00:00:00Z",
+    "statuses": ["PARSED"]
+  },
+  "revisions": {
+    "count": 1,
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "split": {
+    "algorithm": "sha256_revision_id_v1",
+    "seed": "evaluation-v1",
+    "train_basis_points": 8000,
+    "validation_basis_points": 1000,
+    "test_basis_points": 1000
+  },
+  "artifact": {
+    "format": "parquet",
+    "path": "../escape.parquet",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "rows": 1
+  },
+  "lineage_fields": [
+    "receipt_id",
+    "revision_id",
+    "raw_sha256",
+    "pipeline_version",
+    "parser_id",
+    "parser_version",
+    "mapping_version",
+    "schema_version",
+    "quality_score",
+    "issue_codes",
+    "split"
+  ]
+}

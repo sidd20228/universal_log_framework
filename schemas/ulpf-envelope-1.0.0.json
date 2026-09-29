@@ -77,6 +77,12 @@
         "tenant_id": {
           "$ref": "#/$defs/identifier"
         },
+        "environment_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "instance_id": {
+          "$ref": "#/$defs/identifier"
+        },
         "received_at": {
           "$ref": "#/$defs/timestamp"
         },

@@ -2,23 +2,22 @@ name: ulpf
 
 services:
   ulpf:
+    image: ${ULPF_IMAGE:-ulpf:local}
     build:
       context: .
       dockerfile: Dockerfile
     command:
       - serve
-      - --listen=0.0.0.0:8080
-      - --sqlite=/var/lib/ulpf/state/ulpf.sqlite
-      - --raw-root=/var/lib/ulpf/raw
-      - --tenant=${ULPF_TENANT:-demo}
-      - --workers=${ULPF_WORKERS:-2}
+      - --config=/etc/ulpf/runtime.yaml
     environment:
       ULPF_API_TOKEN: ${ULPF_API_TOKEN:?set ULPF_API_TOKEN to a 32+ character secret}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD to a non-default secret}
     ports:
       - "${ULPF_HTTP_PORT:-8080}:8080"
     volumes:
       - ulpf-raw:/var/lib/ulpf/raw
       - ulpf-state:/var/lib/ulpf/state
+      - ./configs/runtime.example.yaml:/etc/ulpf/runtime.yaml:ro
     read_only: true
     tmpfs:
       - /var/lib/ulpf/tmp:rw,noexec,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=0700
@@ -48,6 +47,7 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
+      - ./migrations/clickhouse/001_events.sql:/docker-entrypoint-initdb.d/001_events.sql:ro
     cap_drop:
       - ALL
     cap_add:

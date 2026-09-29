@@ -25,6 +25,9 @@ func TestClickHouseReaderUsesTypedParametersAndPaginates(t *testing.T) {
 		if request.URL.Query().Get("param_tenant") != "tenant-a" || request.URL.Query().Get("param_action") != "deny' OR 1=1 --" || request.URL.Query().Get("param_limit") != "2" {
 			t.Fatalf("query parameters = %v", request.URL.Query())
 		}
+		if request.URL.Query().Get("output_format_json_quote_64bit_integers") != "0" {
+			t.Fatalf("64-bit JSON setting = %q", request.URL.Query().Get("output_format_json_quote_64bit_integers"))
+		}
 		writer.Header().Set("Content-Type", "application/x-ndjson")
 		for index := 1; index <= 2; index++ {
 			fmt.Fprintf(writer, `{"receipt_id":"receipt-%d","revision_id":"revision-%d","tenant_id":"tenant-a","received_at_ns":%d,"event_time_ns":null,"source_profile_id":"synthetic","class_uid":4001,"action":"deny","src_ip":"192.0.2.%d","dst_ip":null,"status":"PARSED","raw_sha256":"%s","quality_score":1}`+"\n",

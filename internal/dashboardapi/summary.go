@@ -52,6 +52,7 @@ type Totals struct {
 	RawBytes  int64 `json:"raw_bytes"`
 	Pending   int64 `json:"pending"`
 	Failed    int64 `json:"failed"`
+	Delivered int64 `json:"delivered"`
 }
 
 type PipelineStage struct {
@@ -71,6 +72,8 @@ type RecentEvent struct {
 	ReceiptID       string    `json:"receipt_id"`
 	RevisionID      string    `json:"revision_id"`
 	TenantID        string    `json:"tenant_id"`
+	EnvironmentID   string    `json:"environment_id,omitempty"`
+	InstanceID      string    `json:"instance_id,omitempty"`
 	ReceivedAt      time.Time `json:"received_at"`
 	SourceProfileID string    `json:"source_profile_id,omitempty"`
 	Status          string    `json:"status"`
@@ -85,6 +88,8 @@ type RecentEvent struct {
 type Summary struct {
 	GeneratedAt        time.Time        `json:"generated_at"`
 	TenantID           string           `json:"tenant_id"`
+	EnvironmentID      string           `json:"environment_id,omitempty"`
+	InstanceID         string           `json:"instance_id,omitempty"`
 	WindowMinutes      int              `json:"window_minutes"`
 	Totals             Totals           `json:"totals"`
 	AcceptedTotal      int64            `json:"accepted_total"`
@@ -94,6 +99,7 @@ type Summary struct {
 	Pipeline           []PipelineStage  `json:"pipeline"`
 	Activity           []ActivityBucket `json:"activity"`
 	RecentEvents       []RecentEvent    `json:"recent_events"`
+	Nodes              []NodeStatus     `json:"nodes,omitempty"`
 }
 
 // SQLiteReader reads aggregate metadata from the runtime database. Aggregate
@@ -184,10 +190,25 @@ FROM receipts WHERE tenant_id = ?`, tenantID).Scan(&totals.Receipts, &totals.Raw
 JOIN receipts r ON r.receipt_id = rv.receipt_id WHERE r.tenant_id = ?`, tenantID).Scan(&totals.Revisions); err != nil {
 		return Summary{}, fmt.Errorf("read revision total: %w", err)
 	}
-	totals.Pending = receiptCounts["ACCEPTED"] + receiptCounts["PROCESSING"] + receiptCounts["REVISION_COMMITTED"] + receiptCounts["DELIVERY_PENDING"]
+	// A committed revision is complete when no connector is configured. Once a
+	// connector is configured, connector_deliveries is the authoritative queue;
+	// counting REVISION_COMMITTED here would report delivered events as pending.
+	totals.Pending = receiptCounts["ACCEPTED"] + receiptCounts["PROCESSING"] + receiptCounts["DELIVERY_PENDING"]
 	// Failed is an operational queue count. Interpretation ERROR and INVALID
 	// remain separately visible in status_counts and are not double-counted.
 	totals.Failed = receiptCounts["DEAD_LETTER"]
+	var deliveryPending, deliveryFailed, deliverySucceeded int64
+	if err := tx.QueryRowContext(ctx, `SELECT
+COALESCE(SUM(CASE WHEN d.state IN ('PENDING','PROCESSING','RETRY') THEN 1 ELSE 0 END), 0),
+COALESCE(SUM(CASE WHEN d.state = 'DEAD_LETTER' THEN 1 ELSE 0 END), 0),
+COALESCE(SUM(CASE WHEN d.state = 'DELIVERED' THEN 1 ELSE 0 END), 0)
+FROM connector_deliveries d JOIN revisions rv ON rv.revision_id = d.revision_id
+JOIN receipts r ON r.receipt_id = rv.receipt_id WHERE r.tenant_id = ?`, tenantID).Scan(&deliveryPending, &deliveryFailed, &deliverySucceeded); err != nil {
+		return Summary{}, fmt.Errorf("read delivery totals: %w", err)
+	}
+	totals.Pending += deliveryPending
+	totals.Failed += deliveryFailed
+	totals.Delivered = deliverySucceeded
 
 	activity, err := readActivity(ctx, tx, tenantID, now)
 	if err != nil {
@@ -297,7 +318,8 @@ WHERE r.tenant_id = ? AND rv.created_at_ns >= ? AND rv.created_at_ns < ? GROUP B
 }
 
 func readRecent(ctx context.Context, tx *sql.Tx, tenantID string) ([]RecentEvent, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT r.receipt_id, rv.revision_id, r.tenant_id, r.received_at_ns,
+	rows, err := tx.QueryContext(ctx, `SELECT r.receipt_id, rv.revision_id, r.tenant_id,
+COALESCE(r.environment_id, ''), COALESCE(r.instance_id, ''), r.received_at_ns,
 COALESCE(r.source_profile_id, ''), COALESCE(json_extract(rv.revision_json, '$.status'), ''),
 COALESCE(json_extract(rv.revision_json, '$.parser.id'), ''), r.raw_sha256,
 COALESCE(CAST(json_extract(rv.envelope_json, '$.event.action') AS TEXT), ''),
@@ -313,7 +335,7 @@ WHERE r.tenant_id = ? ORDER BY rv.created_at_ns DESC, rv.revision_id DESC LIMIT 
 		var item RecentEvent
 		var receivedAt int64
 		var quality sql.NullFloat64
-		if err := rows.Scan(&item.ReceiptID, &item.RevisionID, &item.TenantID, &receivedAt, &item.SourceProfileID, &item.Status, &item.ParserID, &item.RawSHA256, &item.Action, &quality); err != nil {
+		if err := rows.Scan(&item.ReceiptID, &item.RevisionID, &item.TenantID, &item.EnvironmentID, &item.InstanceID, &receivedAt, &item.SourceProfileID, &item.Status, &item.ParserID, &item.RawSHA256, &item.Action, &quality); err != nil {
 			return nil, fmt.Errorf("scan recent event: %w", err)
 		}
 		item.ReceivedAt = time.Unix(0, receivedAt).UTC()
@@ -336,7 +358,7 @@ func buildPipeline(totals Totals, states map[string]int64) []PipelineStage {
 		{Stage: "admit", Label: "Admit", Count: totals.Receipts},
 		{Stage: "interpret", Label: "Interpret", Count: totals.Revisions},
 		{Stage: "commit", Label: "Commit", Count: totals.Revisions},
-		{Stage: "deliver", Label: "Deliver", Count: states["DELIVERED"]},
+		{Stage: "deliver", Label: "Deliver", Count: totals.Delivered},
 	}
 	for index := range stages {
 		switch {

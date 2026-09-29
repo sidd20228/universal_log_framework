@@ -1,0 +1,29 @@
+{
+  "config_version": "ulpf-mapping/1",
+  "id": "reference-kv-firewall",
+  "version": "1.0.0",
+  "rules": [
+    {"id":"class-uid","from":"fields.attributes.event","to":"event.class_uid","convert":"lowercase","lookup":"traffic-class-uid","required":true},
+    {"id":"class-name","from":"fields.attributes.event","to":"event.class_name","convert":"lowercase","lookup":"traffic-class-name","required":true},
+    {"id":"activity-id","from":"fields.attributes.event","to":"event.activity_id","convert":"lowercase","lookup":"traffic-activity-id"},
+    {"id":"activity","from":"fields.attributes.event","to":"event.activity","convert":"lowercase","lookup":"traffic-activity"},
+    {"id":"event-time","from":"fields.attributes.time","to":"event.time","convert":"timestamp","timestamp_layouts":["RFC3339Nano"]},
+    {"id":"action","from":"fields.attributes.action","to":"event.action","convert":"lowercase","lookup":"network-action","required":true},
+    {"id":"status","from":"fields.attributes.status","to":"event.status","convert":"lowercase"},
+    {"id":"severity-id","from":"fields.attributes.severity_id","to":"event.severity_id","convert":"integer"},
+    {"id":"severity","from":"fields.attributes.severity","to":"event.severity","convert":"lowercase","lookup":"severity"},
+    {"id":"source-ip","from":"fields.attributes.src","to":"event.src_endpoint.ip","convert":"ip","required":true},
+    {"id":"source-port","from":"fields.attributes.spt","to":"event.src_endpoint.port","convert":"port"},
+    {"id":"source-host","from":"fields.attributes.src_host","to":"event.src_endpoint.hostname","convert":"lowercase"},
+    {"id":"source-mac","from":"fields.attributes.src_mac","to":"event.src_endpoint.mac","convert":"lowercase"},
+    {"id":"destination-ip","from":"fields.attributes.dst","to":"event.dst_endpoint.ip","convert":"ip","required":true},
+    {"id":"destination-port","from":"fields.attributes.dpt","to":"event.dst_endpoint.port","convert":"port"},
+    {"id":"protocol-name","from":"fields.attributes.proto","to":"event.connection_info.protocol_name","convert":"lowercase"},
+    {"id":"protocol-number","from":"fields.attributes.proto_num","to":"event.connection_info.protocol_num","convert":"integer"},
+    {"id":"device-type","from":"fields.attributes.device_type","to":"event.device.type","convert":"lowercase","lookup":"device-type"},
+    {"id":"device-host","from":"fields.attributes.device_host","to":"event.device.hostname","convert":"lowercase"},
+    {"id":"device-vendor","from":"fields.attributes.device_vendor","to":"event.device.vendor_name","convert":"string"},
+    {"id":"device-product","from":"fields.attributes.device_product","to":"event.device.product_name","convert":"string"},
+    {"id":"tenant-zone","from":"fields.attributes.zone","to":"event.extensions.reference.zone","convert":"lowercase"}
+  ]
+}

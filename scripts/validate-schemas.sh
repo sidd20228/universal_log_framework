@@ -43,4 +43,10 @@ validate_invalid "$repo_root/schemas/parser-bundle-manifest-1.0.0.json" "$repo_r
 validate_invalid "$repo_root/schemas/parser-bundle-manifest-1.0.0.json" "$repo_root/tests/schema/examples/invalid/parser-bundle-path-traversal.json"
 validate_invalid "$repo_root/schemas/parser-bundle-manifest-1.0.0.json" "$repo_root/tests/schema/examples/invalid/parser-bundle-executable.json"
 
+validate_valid "$repo_root/schemas/ulpf-feature-set-1.0.0.json" "$repo_root/tests/schema/examples/valid/feature-set.json"
+validate_invalid "$repo_root/schemas/ulpf-feature-set-1.0.0.json" "$repo_root/tests/schema/examples/invalid/feature-set-raw-source.json"
+
+validate_valid "$repo_root/schemas/ulpf-dataset-manifest-1.0.0.json" "$repo_root/tests/schema/examples/valid/dataset-manifest.json"
+validate_invalid "$repo_root/schemas/ulpf-dataset-manifest-1.0.0.json" "$repo_root/tests/schema/examples/invalid/dataset-manifest-path-traversal.json"
+
 "$repo_root/scripts/verify-ocsf-vendor.sh"

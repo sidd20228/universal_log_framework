@@ -231,6 +231,10 @@ func (reader *ClickHouseReader) execute(ctx context.Context, statement string, p
 	queryValues := requestURL.Query()
 	queryValues.Set("database", reader.database)
 	queryValues.Set("query", statement)
+	// ClickHouse quotes 64-bit integers in JSON formats by default to protect
+	// JavaScript clients. This reader decodes nanosecond timestamps as int64,
+	// so request numeric JSON values explicitly.
+	queryValues.Set("output_format_json_quote_64bit_integers", "0")
 	for key, values := range parameters {
 		for _, value := range values {
 			queryValues.Add(key, value)

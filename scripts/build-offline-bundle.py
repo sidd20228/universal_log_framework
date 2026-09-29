@@ -15,11 +15,14 @@ import tarfile
 import tempfile
 
 
-MANIFEST_VERSION = "ulpf-offline-bundle/1.0.0"
-REQUIRED_IMAGES = ("ulpf", "clickhouse", "prometheus")
+MANIFEST_VERSION = "ulpf-offline-bundle/1.1.0"
+REQUIRED_IMAGES = ("ulpf", "clickhouse")
 OPTIONAL_ROLES = {"sbom", "vulnerability_report", "notice", "signature"}
 VERSION_PATTERN = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$")
 COMMIT_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|unknown)$")
+IMAGE_TAG_PATTERN = re.compile(r"^[a-z0-9]+(?:[._/-][a-z0-9]+)*(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})$")
+MAX_IMAGE_JSON_BYTES = 4 * 1024 * 1024
+COMPOSE_MARKERS = {"ulpf": "__ULPF_IMAGE__", "clickhouse": "__CLICKHOUSE_IMAGE__"}
 
 
 def fail(message):
@@ -43,6 +46,130 @@ def parse_artifact(value):
     if role not in OPTIONAL_ROLES or not destination or not source:
         fail(f"invalid --artifact value {value!r}")
     return role, destination, source
+
+
+def reject_duplicate_keys(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            fail(f"container image JSON contains duplicate key {key!r}")
+        value[key] = item
+    return value
+
+
+def decode_json(body, label):
+    try:
+        return json.loads(body.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(f"{label} is not strict UTF-8 JSON: {error}")
+
+
+def safe_image_member(name, label):
+    if not name or "\\" in name or "\x00" in name or name.startswith("/"):
+        fail(f"{label} contains unsafe member {name!r}")
+    stripped = name[:-1] if name.endswith("/") else name
+    path = PurePosixPath(stripped)
+    if not path.parts or any(part in ("", ".", "..") for part in path.parts) or path.as_posix() != stripped:
+        fail(f"{label} contains non-canonical member {name!r}")
+    return path.as_posix()
+
+
+def validate_image_tag(role, tag, version):
+    if not isinstance(tag, str) or not IMAGE_TAG_PATTERN.fullmatch(tag):
+        fail(f"{role} image has invalid Docker tag {tag!r}")
+    repository, image_version = tag.rsplit(":", 1)
+    repository_without_registry = repository.rsplit("/", 1)[-1]
+    if role == "ulpf":
+        if repository_without_registry != "ulpf" or image_version != version:
+            fail(f"ulpf image must have the release tag ulpf:{version}, found {tag!r}")
+    elif role == "clickhouse":
+        if not repository.endswith("clickhouse/clickhouse-server") or image_version == "latest":
+            fail("clickhouse image must use a versioned clickhouse/clickhouse-server tag")
+    return tag
+
+
+def inspect_docker_image(path, architecture, role, version):
+    source = regular_source(path, f"image.{role}")
+    try:
+        archive = tarfile.open(source, "r:*")
+    except tarfile.TarError as error:
+        fail(f"image.{role} is not a Docker-save tar archive: {error}")
+    with archive:
+        members = {}
+        for member in archive.getmembers():
+            name = safe_image_member(member.name, f"image.{role}")
+            if name in members:
+                fail(f"image.{role} contains duplicate member {name!r}")
+            if not (member.isdir() or member.isreg()):
+                fail(f"image.{role} contains a link or special member {name!r}")
+            members[name] = member
+        manifest_member = members.get("manifest.json")
+        if manifest_member is None or not manifest_member.isreg() or manifest_member.size > MAX_IMAGE_JSON_BYTES:
+            fail(f"image.{role} must contain a bounded regular manifest.json")
+        manifest = decode_json(archive.extractfile(manifest_member).read(), f"image.{role} manifest.json")
+        if not isinstance(manifest, list) or len(manifest) != 1 or not isinstance(manifest[0], dict):
+            fail(f"image.{role} must contain exactly one Docker-save manifest entry")
+        entry = manifest[0]
+        if set(entry) != {"Config", "RepoTags", "Layers"}:
+            fail(f"image.{role} manifest entry has missing or unknown fields")
+        config_name, tags, layers = entry["Config"], entry["RepoTags"], entry["Layers"]
+        if not isinstance(config_name, str) or not re.fullmatch(r"[0-9a-f]{64}\.json", config_name):
+            fail(f"image.{role} has an invalid content-addressed config path")
+        if not isinstance(tags, list) or len(tags) != 1:
+            fail(f"image.{role} must contain exactly one repository tag")
+        tag = validate_image_tag(role, tags[0], version)
+        if not isinstance(layers, list) or not layers or not all(isinstance(item, str) for item in layers) or len(set(layers)) != len(layers):
+            fail(f"image.{role} has an invalid or duplicate layer list")
+        config_member = members.get(config_name)
+        if config_member is None or not config_member.isreg() or config_member.size > MAX_IMAGE_JSON_BYTES:
+            fail(f"image.{role} config is missing or too large")
+        config_body = archive.extractfile(config_member).read()
+        if hashlib.sha256(config_body).hexdigest() != config_name[:-5]:
+            fail(f"image.{role} config digest does not match its filename")
+        config = decode_json(config_body, f"image.{role} config")
+        if not isinstance(config, dict) or config.get("os") != "linux" or config.get("architecture") != architecture:
+            fail(f"image.{role} config must target linux/{architecture}")
+        rootfs = config.get("rootfs")
+        diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, dict) and rootfs.get("type") == "layers" else None
+        if not isinstance(diff_ids, list) or len(diff_ids) != len(layers) or not all(isinstance(item, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", item) for item in diff_ids):
+            fail(f"image.{role} rootfs diff_ids must match the layer count")
+        for index, layer_name in enumerate(layers):
+            canonical = safe_image_member(layer_name, f"image.{role}")
+            layer = members.get(canonical)
+            if layer is None or not layer.isreg():
+                fail(f"image.{role} referenced layer {canonical!r} is missing")
+            stream = archive.extractfile(layer)
+            digest = hashlib.sha256()
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+            actual = digest.hexdigest()
+            if canonical.endswith("/layer.tar") and diff_ids[index] != "sha256:" + actual:
+                fail(f"image.{role} layer {canonical!r} does not match rootfs diff_id")
+            blob_match = re.fullmatch(r"blobs/sha256/([0-9a-f]{64})", canonical)
+            if blob_match is not None and blob_match.group(1) != actual:
+                fail(f"image.{role} blob {canonical!r} does not match its content digest")
+        return tag
+
+
+def render_compose(template_path, image_tags):
+    source = regular_source(template_path, "compose template")
+    if source.stat().st_size > 1024 * 1024:
+        fail("compose template is unexpectedly large")
+    try:
+        body = source.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        fail("compose template is not UTF-8")
+    for role, marker in COMPOSE_MARKERS.items():
+        if body.count(marker) != 1:
+            fail(f"compose template must contain marker {marker!r} exactly once")
+        body = body.replace(marker, image_tags[role])
+    if re.search(r"(?m)^\s*build\s*:", body):
+        fail("offline compose must not contain a build directive")
+    if len(re.findall(r"(?m)^\s*pull_policy\s*:\s*never\s*$", body)) != len(REQUIRED_IMAGES):
+        fail("offline compose must set pull_policy: never for every image service")
+    if "../migrations/clickhouse/001_events.sql:/docker-entrypoint-initdb.d/001_events.sql:ro" not in body:
+        fail("offline compose must mount the packaged ClickHouse migration read-only")
+    return body.encode("utf-8")
 
 
 def regular_source(path, label):
@@ -117,6 +244,23 @@ class Assembly:
         mode = 0o755 if executable else 0o644
         os.chmod(target, mode)
         os.utime(target, (self.epoch, self.epoch), follow_symlinks=False)
+        digest, size = digest_file(target)
+        self.artifacts[key] = {
+            "path": key,
+            "role": role,
+            "sha256": digest,
+            "size_bytes": size,
+            "mode": format(mode, "04o"),
+        }
+
+    def add_bytes(self, body, destination, role, executable=False):
+        relative = safe_relative(destination)
+        key = relative.as_posix()
+        if key in ("manifest.json", "SHA256SUMS") or key in self.artifacts:
+            fail(f"duplicate or reserved destination path {key!r}")
+        target = self.root.joinpath(*relative.parts)
+        mode = 0o755 if executable else 0o644
+        write_bytes(target, body, mode, self.epoch)
         digest, size = digest_file(target)
         self.artifacts[key] = {
             "path": key,
@@ -222,6 +366,10 @@ def parse_arguments():
     parser.add_argument("--output", required=True)
     parser.add_argument("--compose", required=True)
     parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--clickhouse-migration",
+        default=str(script_root / "migrations/clickhouse/001_events.sql"),
+    )
     parser.add_argument("--image", action="append", default=[], metavar="NAME=ARCHIVE")
     parser.add_argument("--image-ref", action="append", default=[], metavar="NAME=REFERENCE")
     parser.add_argument(
@@ -275,8 +423,12 @@ def main():
         payload_root = temporary_root / "payload"
         payload_root.mkdir()
         assembly = Assembly(payload_root, args.source_date_epoch)
-        assembly.add_file(args.compose, "compose/compose.yaml", "compose")
         assembly.add_file(args.config, "config/ulpf.yaml", "config")
+        assembly.add_file(
+            args.clickhouse_migration,
+            "migrations/clickhouse/001_events.sql",
+            "migration.clickhouse",
+        )
         assembly.add_tree(args.docs_root, "docs", "documentation")
         assembly.add_tree(args.schemas_root, "schemas", "schema")
         assembly.add_file(args.license, "licenses/LICENSE", "license")
@@ -287,6 +439,7 @@ def main():
             assembly.add_file(source, destination, role)
 
         engine = None
+        image_tags = {}
         for name in REQUIRED_IMAGES:
             source_kind, source_value = images[name]
             source_path = source_value
@@ -298,7 +451,10 @@ def main():
                 exported = temporary_root / f"{name}.tar"
                 export_image(engine, source_value, exported)
                 source_path = str(exported)
+            image_tags[name] = inspect_docker_image(source_path, args.arch, name, args.version)
             assembly.add_file(source_path, f"images/{name}-{args.arch}.tar", f"image.{name}")
+
+        assembly.add_bytes(render_compose(args.compose, image_tags), "compose/compose.yaml", "compose")
 
         manifest = {
             "manifest_version": MANIFEST_VERSION,
@@ -310,7 +466,7 @@ def main():
                 "archive_root": archive_root,
             },
             "required_roles": [
-                "image.ulpf", "image.clickhouse", "image.prometheus", "compose", "config",
+                "image.ulpf", "image.clickhouse", "compose", "config", "migration.clickhouse",
                 "documentation", "license", "schema", "verifier",
             ],
             "artifacts": [assembly.artifacts[path] for path in sorted(assembly.artifacts)],

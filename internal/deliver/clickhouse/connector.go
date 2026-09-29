@@ -27,6 +27,7 @@ const (
 )
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+var connectorIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Config struct {
@@ -55,7 +56,7 @@ type Connector struct {
 }
 
 func New(config Config) (*Connector, error) {
-	if !identifierPattern.MatchString(config.ID) || !identifierPattern.MatchString(config.Database) || !identifierPattern.MatchString(config.Table) {
+	if !connectorIDPattern.MatchString(config.ID) || !identifierPattern.MatchString(config.Database) || !identifierPattern.MatchString(config.Table) {
 		return nil, errors.New("ClickHouse connector id, database, and table must be safe identifiers")
 	}
 	endpoint, err := url.Parse(config.Endpoint)
@@ -191,6 +192,8 @@ type row struct {
 	ReceiptID       string   `json:"receipt_id"`
 	RevisionID      string   `json:"revision_id"`
 	TenantID        string   `json:"tenant_id"`
+	EnvironmentID   string   `json:"environment_id"`
+	InstanceID      string   `json:"instance_id"`
 	ReceivedAt      string   `json:"received_at"`
 	EventTime       *string  `json:"event_time,omitempty"`
 	SourceProfileID string   `json:"source_profile_id"`
@@ -216,6 +219,7 @@ type row struct {
 func makeRow(record deliver.ExportRecord) row {
 	value := row{
 		ReceiptID: record.ReceiptID, RevisionID: record.RevisionID, TenantID: record.TenantID,
+		EnvironmentID: record.EnvironmentID, InstanceID: record.InstanceID,
 		ReceivedAt:      record.ReceivedAt.UTC().Format("2006-01-02 15:04:05.999999"),
 		SourceProfileID: record.SourceProfile, ClassUID: record.ClassUID, ActivityID: record.ActivityID,
 		SeverityID: record.SeverityID, SourcePort: record.SourcePort, DestinationPort: record.DestinationPort,

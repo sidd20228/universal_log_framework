@@ -29,8 +29,10 @@ update.
 - accepted and committed activity in twelve five-minute buckets;
 - interpretation status distribution;
 - the twenty newest committed events for the selected tenant; and
-- receipt, raw-evidence metadata, processing revision, canonical fields, and
-  provenance counts in the trace inspector.
+- connector pending, failed, and delivered counts;
+- local and configured peer-node freshness and availability; and
+- receipt, raw-evidence metadata, processing revision, canonical fields,
+  origin identity, and provenance counts in the trace inspector.
 
 The trace inspector deliberately does not request or render raw event bytes.
 Raw evidence remains behind the separate `raw:read` scope and the receipt raw
@@ -43,11 +45,18 @@ one `tenant_id` query that exactly matches an allowed tenant. The response is a
 bounded aggregate snapshot: fixed status and state groups, twelve activity
 buckets, five pipeline stages, and at most twenty recent events.
 
-This view describes one ULPF process and its local SQLite store. It is useful
-for a demo, development, and a small installation. It does not federate
-multiple enterprise environments, query ClickHouse, or prove that connector
-delivery has happened. The Deliver stage reflects local receipts in the
-`DELIVERED` state only.
+The local summary is read as one consistent SQLite snapshot. When federation
+peers are configured, the server queries them concurrently with bounded
+timeouts, combines tenant-scoped totals/activity/recent events, preserves each
+event's environment and instance origin, and reports unavailable or stale
+nodes explicitly. Cross-node trace requests use a same-origin server proxy;
+peer credentials are never returned to the browser. Delivery totals come from
+the durable per-connector queue. Event-list and trace APIs may use ClickHouse
+when it is selected as the runtime query backend.
+
+This application-level federation is intended for a bounded node set. Large
+installations should use a shared indexed backend and independently qualify
+its replication, retention, capacity, and availability.
 
 ## Security and disconnected operation
 

@@ -1,0 +1,14 @@
+{
+  "contract_version": "ulpf-feature-set/1.0.0",
+  "id": "unsafe",
+  "version": "1.0.0",
+  "envelope_schema_version": "ulpf-envelope/1.0.0",
+  "features": [
+    {
+      "name": "payload",
+      "type": "string",
+      "source_path": "raw.payload",
+      "null_policy": "nullable"
+    }
+  ]
+}

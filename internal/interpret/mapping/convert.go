@@ -173,8 +173,24 @@ func parseFixedTimezone(value string) (*time.Location, error) {
 
 func coerceTarget(kind targetKind, value any) (any, error) {
 	switch kind {
-	case targetInteger:
-		return asInt64(value)
+	case targetNonNegativeInteger:
+		integer, err := asInt64(value)
+		if err != nil || integer < 0 {
+			return nil, errors.New("target requires a non-negative integer")
+		}
+		return integer, nil
+	case targetSeverityID:
+		integer, err := asInt64(value)
+		if err != nil || integer < 0 || integer > 6 {
+			return nil, errors.New("severity id is outside 0..6")
+		}
+		return integer, nil
+	case targetProtocolNumber:
+		integer, err := asInt64(value)
+		if err != nil || integer < 0 || integer > 255 {
+			return nil, errors.New("protocol number is outside 0..255")
+		}
+		return integer, nil
 	case targetIP:
 		if _, ok := value.(netip.Addr); !ok {
 			return nil, errors.New("target requires netip.Addr")
@@ -203,10 +219,51 @@ func coerceTarget(kind targetKind, value any) (any, error) {
 		if _, allowed := allowedDeviceTypes[text]; !allowed {
 			return nil, errors.New("device type is outside the controlled vocabulary")
 		}
-	case targetProtocol, targetString:
-		if _, ok := value.(string); !ok {
-			return nil, errors.New("target requires text")
+	case targetSeverity:
+		text, ok := value.(string)
+		if !ok {
+			return nil, errors.New("severity target requires text")
 		}
+		if _, allowed := allowedSeverities[text]; !allowed {
+			return nil, errors.New("severity is outside the controlled vocabulary")
+		}
+	case targetProtocol:
+		text, ok := value.(string)
+		if !ok || len(text) == 0 || len(text) > 32 || text[0] < 'a' || text[0] > 'z' {
+			return nil, errors.New("protocol target is invalid")
+		}
+		for _, character := range text[1:] {
+			if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '.' || character == '_' || character == '-' {
+				continue
+			}
+			return nil, errors.New("protocol target is invalid")
+		}
+	case targetString, targetString64, targetString128, targetString255, targetString512, targetMAC:
+		text, ok := value.(string)
+		if !ok || text == "" {
+			return nil, errors.New("target requires non-empty text")
+		}
+		limit := 0
+		switch kind {
+		case targetString64:
+			limit = 64
+		case targetString128:
+			limit = 128
+		case targetString255:
+			limit = 255
+		case targetString512:
+			limit = 512
+		case targetMAC:
+			if len(text) < 11 || len(text) > 23 {
+				return nil, errors.New("MAC address text length is invalid")
+			}
+		}
+		if limit != 0 && len(text) > limit {
+			return nil, fmt.Errorf("target text exceeds %d bytes", limit)
+		}
+	case targetExtension:
+		// Extension leaves deliberately retain the configured scalar conversion.
+		// The versioned bundle event schema is the authority for richer semantics.
 	}
 	return value, nil
 }

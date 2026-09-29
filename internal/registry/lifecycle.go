@@ -154,6 +154,19 @@ func (lifecycle *Lifecycle) RegistrySnapshot() *Snapshot {
 	return lifecycle.registry.Snapshot()
 }
 
+// DescriptorByDigest reloads an installed descriptor through the immutable
+// catalog so callers can perform semantic compilation before activation.
+func (lifecycle *Lifecycle) DescriptorByDigest(ctx context.Context, digest string) (Descriptor, error) {
+	if lifecycle == nil || !sha256Pattern.MatchString(digest) {
+		return Descriptor{}, ErrInvalidLifecycle
+	}
+	installed, err := lifecycle.store.InstalledBundleByDigest(ctx, digest)
+	if err != nil {
+		return Descriptor{}, err
+	}
+	return lifecycle.catalog.LoadInstalled(ctx, installed)
+}
+
 func (lifecycle *Lifecycle) ActivationSnapshot() *ActivationSnapshot {
 	if lifecycle == nil {
 		return &ActivationSnapshot{pins: map[string]Activation{}}

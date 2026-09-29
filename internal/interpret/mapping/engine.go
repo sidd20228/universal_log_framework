@@ -59,7 +59,7 @@ func (engine *Engine) Map(ctx context.Context, document interpret.ParsedDocument
 			}
 			converted = canonical
 		}
-		kind := allowedTargets[rule.To]
+		kind, _ := targetForPath(rule.To)
 		converted, err = coerceTarget(kind, converted)
 		if err != nil {
 			failedSources[concretePath] = struct{}{}

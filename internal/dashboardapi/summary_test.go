@@ -51,7 +51,7 @@ func TestSQLiteReaderReturnsTenantScopedBoundedSummary(t *testing.T) {
 	if summary.Totals.Receipts != 3 || summary.Totals.Revisions != 2 || summary.Totals.RawBytes != 600 {
 		t.Fatalf("totals = %+v", summary.Totals)
 	}
-	if summary.Totals.Pending != 2 || summary.Totals.Failed != 1 {
+	if summary.Totals.Pending != 1 || summary.Totals.Failed != 1 {
 		t.Fatalf("queue totals = %+v", summary.Totals)
 	}
 	if summary.AcceptedTotal != 3 || summary.CommittedTotal != 2 {

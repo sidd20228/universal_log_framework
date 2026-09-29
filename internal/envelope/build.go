@@ -76,6 +76,7 @@ func Build(input Input) (Envelope, error) {
 		SchemaVersion: SchemaVersion,
 		Receipt: Receipt{
 			ID: input.Receipt.ID, TenantID: input.Receipt.TenantID, ReceivedAt: input.Receipt.ReceivedAt.UTC(),
+			EnvironmentID: input.Receipt.EnvironmentID, InstanceID: input.Receipt.InstanceID,
 			ListenerID: input.Receipt.ListenerID, Transport: input.Receipt.Transport, Peer: peer,
 			SourceProfileID: input.Receipt.SourceProfileID, Framing: input.Receipt.Framing,
 		},

@@ -1,5 +1,9 @@
 # Universal Log Processing Framework
 
+The complete architecture, configuration, operation, extension, dashboard,
+delivery, analytics, container, and air-gap guide is in
+[`docs/PROJECT_HANDBOOK.md`](docs/PROJECT_HANDBOOK.md).
+
 ULPF accepts security-event bytes, durably stores the exact occurrence, and
 creates deterministic, versioned interpretations. A malformed or unknown
 message still has a receipt and raw SHA-256 reference, so parser failure does
@@ -7,11 +11,10 @@ not erase the evidence.
 
 The runnable MVP is a Go modular monolith backed by SQLite and a filesystem
 evidence store. `ulpf serve` exposes an authenticated HTTP API and processes
-accepted JSON, Syslog, CEF, LEEF, CSV, XML, and key-value messages with the
-built-in syntax parsers. The bundled Compose deployment also starts
-ClickHouse, while the self-contained API currently reads committed envelopes
-from bounded SQLite pages. The ClickHouse query and delivery adapters are
-available as packages but are not selected by `ulpf serve`.
+accepted JSON, Syslog, CEF, LEEF, CSV, XML, and key-value messages with built-in
+syntax parsers or configured declarative source bundles. The Compose deployment
+delivers normalized revisions to ClickHouse and selects it as the indexed event
+query backend.
 
 ## Quick start with Compose
 
@@ -37,7 +40,7 @@ Open `http://127.0.0.1:8080/dashboard/` for the live operations dashboard.
 Enter tenant `demo` and the value of `ULPF_API_TOKEN`; the page then shows
 pipeline totals, activity, interpretation status, recent events, and trace
 metadata. See the [dashboard guide](docs/DASHBOARD.md) for its authorization,
-raw-evidence, and single-deployment boundaries.
+raw-evidence, delivery, and federation boundaries.
 
 Admit one JSON occurrence. The body is sent as bytes rather than decoded by
 the HTTP layer:
@@ -107,10 +110,10 @@ Useful commands:
 ./bin/ulpf validate-config configs/runtime.example.yaml
 ```
 
-`configs/runtime.example.yaml` demonstrates the strict control configuration
-schema accepted by `validate-config`. `configs/ulpf.yaml` is a separate offline
-release inventory. The current `serve` command receives runtime settings
-through flags and environment variables; it does not load either YAML file.
+`configs/runtime.example.yaml` demonstrates the strict runtime configuration
+consumed by both `validate-config` and `serve --config`. `configs/ulpf.yaml` is
+a separate offline release inventory. Legacy flags remain available for a
+minimal local SQLite process.
 
 ## Architecture
 
@@ -126,10 +129,12 @@ authenticated HTTP bytes
                            ▼
           immutable revision + evidence envelope
                            │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-       bounded SQLite query       delivery/query adapters
-          used by serve            NDJSON/HTTP/ClickHouse
+                    durable reconcile
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+   SQLite/ClickHouse    SIEM HTTP       NDJSON/Parquet
+     query backend       delivery       data-lake files
 ```
 
 The acceptance boundary is the point after the raw file and SQLite receipt
@@ -158,20 +163,19 @@ See the [architecture two-pager](docs/ARCHITECTURE_TWO_PAGER.md), the
 
 - `ulpf serve` wires HTTP admission only. UDP and TCP Syslog listener packages
   exist and are tested, but the command does not start them.
-- The built-in runtime performs syntax parsing. With no explicit mapping for a
-  format, a valid message is retained as `PARTIALLY_PARSED` rather than given
-  guessed canonical meaning.
-- The local event reader is deliberately bounded and suitable for a demo or
-  small installation. It scans at most 4,096 tenant envelopes for one filtered
-  request. Use the ClickHouse adapter when the deployment needs an indexed
-  production query path.
-- Compose starts ClickHouse and verifies its health, but `ulpf serve` does not
-  deliver revisions to it automatically.
+- The runtime compiles configured declarative bundles into source-profile
+  pipelines. With no explicit mapping, a valid message is retained as
+  `PARTIALLY_PARSED` rather than given guessed canonical meaning.
+- The SQLite reader is deliberately bounded for small installations. Runtime
+  configuration can select authenticated ClickHouse delivery and indexed
+  tenant-scoped event queries; the default Compose file exercises this path.
 - Static bearer tokens are appropriate for loopback or protected private
   networks. TLS termination, mTLS/OIDC, centralized policy, replicated
   storage, automated retention, and automated backups remain deployment work.
-- Bundle loading, lifecycle, activation, and reprocessing are implemented as
-  Go APIs. They are not exposed as `ulpf` CLI commands or wired into `serve`.
+- Bundle validate, install, list, activation history, and CAS activation are
+  exposed through the CLI. `serve` installs and compiles configured bundles at
+  startup. Authenticated hot reload and the durable reprocess executor remain
+  lifecycle work.
 - Offline checksums detect corruption; the current offline builder does not
   create a release signature or establish publisher identity.
 

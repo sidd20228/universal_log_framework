@@ -1,8 +1,13 @@
 config_version: ulpf-config/1
+deployment:
+  environment_id: demo
+  instance_id: node-1
+  tenant_id: demo
+  api_token_ref: env:ULPF_API_TOKEN
 listeners:
   - id: http-8080
     kind: http
-    address: 127.0.0.1:8080
+    address: 0.0.0.0:8080
     max_event_bytes: 1048576
 processing:
   workers: 2
@@ -11,7 +16,19 @@ processing:
   ambiguity_margin: 0.1
 storage:
   raw_root: /var/lib/ulpf/raw
+  sqlite_path: /var/lib/ulpf/state/ulpf.sqlite
+  bundle_root: /var/lib/ulpf/bundles
   high_watermark_percent: 85
 retention:
   raw_days: 7
-connectors: []
+connectors:
+  - id: normalized-clickhouse
+    kind: clickhouse
+    required: true
+    batch_size: 500
+    endpoint: http://clickhouse:8123
+    database: ulpf
+    table: events
+    username: ulpf
+    password_ref: env:CLICKHOUSE_PASSWORD
+    query_backend: true

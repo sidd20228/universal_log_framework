@@ -57,6 +57,38 @@ func TestHTTPHandlerAcceptsOctetStreamAfterDurability(t *testing.T) {
 	}
 }
 
+func TestHTTPHandlerSelectsMostSpecificTrustedCIDRProfile(t *testing.T) {
+	evidence := &memoryEvidence{}
+	inbox := &memoryInbox{}
+	coordinator := fixedCoordinator(t, evidence, inbox, 1024)
+	handler, err := NewHTTPHandler(coordinator, HTTPHandlerConfig{
+		TenantID: "trusted-tenant", EnvironmentID: "prod", InstanceID: "node-a", ListenerID: "http-8080",
+		SourceProfileID: "fallback", SourceProfileByCIDR: map[string]string{"192.0.2.0/24": "network", "192.0.2.44/32": "host"}, MaxEventBytes: 1024,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/ingest", bytes.NewReader([]byte("event")))
+	request.Header.Set("Content-Type", "application/octet-stream")
+	request.Header.Set("X-ULPF-Source-Profile", "untrusted")
+	request.RemoteAddr = "192.0.2.44:9000"
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var body acceptedResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	inbox.mu.Lock()
+	receipt := inbox.receipts[body.ReceiptID]
+	inbox.mu.Unlock()
+	if receipt.SourceProfileID != "host" || receipt.EnvironmentID != "prod" || receipt.InstanceID != "node-a" {
+		t.Fatalf("trusted routing metadata = %+v", receipt)
+	}
+}
+
 func TestHTTPHandlerRejectsInvalidMethodAndContentType(t *testing.T) {
 	handler := testHTTPHandler(t, &memoryEvidence{}, &memoryInbox{}, 1024)
 	for name, test := range map[string]struct {

@@ -1,8 +1,7 @@
 # Operator guide
 
-This guide covers the checked-in single-host runtime. It distinguishes
-procedures supported by `ulpf serve` from adapters that require application
-wiring. Read [container hardening](CONTAINER_SECURITY.md) and
+This guide covers the checked-in single-host runtime and configured federation.
+Read [container hardening](CONTAINER_SECURITY.md) and
 [authorization](AUTHORIZATION.md) before exposing the API outside a protected
 development network.
 
@@ -14,7 +13,7 @@ development network.
 |---|---|---|
 | SQLite | `/var/lib/ulpf/state/ulpf.sqlite` | Receipts, leases, immutable revisions, envelopes, bundle lifecycle state |
 | Raw evidence | `/var/lib/ulpf/raw` | Exact occurrence bytes addressed by receipt-derived paths |
-| ClickHouse | its Compose named volumes | Started and health-checked, but not populated by `ulpf serve` |
+| ClickHouse | its Compose named volumes | Normalized export records and indexed envelopes when configured |
 
 The SQLite database uses WAL mode, foreign keys, and `synchronous=FULL`.
 Evidence writes use a temporary file, file sync, atomic rename, and parent
@@ -38,7 +37,15 @@ container runs with a read-only root, UID/GID 65532, no Linux capabilities,
 and `no-new-privileges`. Its raw and state paths are named volumes. Do not put
 tokens in the Compose file, image, Git-tracked YAML, or command arguments.
 
-For a standalone process, prefer a mounted token file:
+For a standalone process, prefer the strict runtime configuration with secrets
+referenced from the environment or mounted files:
+
+```sh
+./bin/ulpf validate-config /etc/ulpf/runtime.yaml
+./bin/ulpf serve --config /etc/ulpf/runtime.yaml
+```
+
+Legacy flags remain available for a minimal SQLite-only process:
 
 ```sh
 ./bin/ulpf serve \
@@ -71,8 +78,10 @@ shutdown. It is not currently a continuous free-space or ClickHouse probe.
 Admission reports filesystem or SQLite failures on the request that encounters
 them. Monitor storage capacity independently and alert before exhaustion.
 
-ClickHouse has its own Compose health check. Its health does not mean ULPF is
-exporting events to it; the default runtime query path is SQLite.
+ClickHouse has its own Compose health check. The default Compose runtime uses
+ClickHouse for delivery and event queries; verify application-level delivery
+with dashboard connector counts or the authenticated event API as well as the
+container health check.
 
 ## Admission and investigation
 
@@ -141,8 +150,8 @@ For a simple stopped-process backup:
    introducing symbolic links.
 4. Record checksums, ownership, modes, source version, schema migration list,
    and backup time.
-5. Back up ClickHouse separately only if the deployment has wired and used
-   its adapter.
+5. Back up ClickHouse separately when it is configured as a delivery/query
+   backend, as it is in the default Compose deployment.
 6. Restart ULPF and verify readiness and a known receipt/raw hash.
 
 Do not copy only `ulpf.sqlite` while the service is live. A filesystem copy of
@@ -195,8 +204,8 @@ new activation of a previously installed immutable digest; see
 | Admission `503` | SQLite path, locks, I/O | Preserve files, inspect host/storage errors, and restore only from a verified matched backup |
 | Receipt remains `PROCESSING` | Worker/process interruption | Wait for lease expiry and a healthy worker claim; repeated failures require investigation |
 | `DEAD_LETTER` with `ERROR` revision | Receipt attempt/error code | Preserve raw bytes, fix the pipeline, then use the lifecycle reprocessing API with an explicit version |
-| Event list is slow or returns backend unavailable | SQLite 4,096-envelope scan ceiling | Narrow tenant/time filters or deploy and wire the indexed ClickHouse reader |
-| ClickHouse is healthy but empty | Default runtime wiring | This is expected until a delivery/indexing coordinator is configured by the embedding application |
+| Event list returns backend unavailable | Selected query backend and credentials | Check ClickHouse health, configured database/table, credentials, migration, and ULPF logs |
+| ClickHouse is healthy but empty | Delivery queue and schema | Check dashboard pending/failed counts, connector credentials, migration table, and retry/dead-letter state |
 | Raw hash verification fails | Storage corruption or wrong restore pair | Stop processing that evidence, preserve the object, and restore from a verified copy |
 
 Errors, logs, and audit records must not include payload bytes or tokens.

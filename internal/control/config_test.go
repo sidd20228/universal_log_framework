@@ -8,6 +8,11 @@ import (
 )
 
 const validConfigYAML = `config_version: ulpf-config/1
+deployment:
+  environment_id: lab
+  instance_id: node-a
+  tenant_id: tenant-a
+  api_token_ref: env:ULPF_TEST_TOKEN
 listeners:
   - id: syslog-udp-5514
     kind: syslog_udp
@@ -22,6 +27,7 @@ processing:
   ambiguity_margin: 0.10
 storage:
   raw_root: /var/lib/ulpf/raw
+  sqlite_path: /var/lib/ulpf/state/ulpf.sqlite
   high_watermark_percent: 85
 retention:
   raw_days: 7
@@ -29,6 +35,11 @@ connectors:
   - id: normalized-clickhouse
     kind: clickhouse
     required: true
+    endpoint: http://clickhouse:8123
+    database: ulpf
+    table: normalized_events
+    username: ulpf
+    password_ref: env:CLICKHOUSE_PASSWORD
 `
 
 func TestParseValidConfiguration(t *testing.T) {

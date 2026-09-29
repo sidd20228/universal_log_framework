@@ -1,0 +1,12 @@
+{
+  "config_version": "ulpf-taxonomies/1",
+  "taxonomies": {
+    "traffic-class-uid": {"4001":["traffic"]},
+    "traffic-class-name": {"Network Activity":["traffic"]},
+    "traffic-activity-id": {"1":["traffic"]},
+    "traffic-activity": {"Traffic":["traffic"]},
+    "network-action": {"allow":["allow","permit"],"deny":["block","blocked","deny","drop"]},
+    "severity": {"medium":["medium","warning"]},
+    "device-type": {"firewall":["firewall","fw"]}
+  }
+}

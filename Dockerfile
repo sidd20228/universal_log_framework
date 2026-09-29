@@ -44,6 +44,7 @@ LABEL org.opencontainers.image.title="ULPF" \
 
 COPY --from=build --chown=65532:65532 --chmod=0555 /out/ulpf /usr/local/bin/ulpf
 COPY --from=build --chown=65532:65532 /runtime/ /
+COPY --chown=65532:65532 bundles/ /usr/share/ulpf/bundles/
 
 ENV HOME=/var/lib/ulpf \
     TMPDIR=/var/lib/ulpf/tmp

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ulpf.example/schemas/ulpf-dataset-manifest-1.0.0.json",
+  "title": "ULPF analytics dataset manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "dataset_id",
+    "tenant_id",
+    "envelope_schema_version",
+    "feature_set",
+    "selection",
+    "revisions",
+    "split",
+    "artifact",
+    "lineage_fields"
+  ],
+  "properties": {
+    "contract_version": {"const": "ulpf-dataset-manifest/1.0.0"},
+    "dataset_id": {"$ref": "#/$defs/sha256"},
+    "tenant_id": {"$ref": "#/$defs/identifier"},
+    "envelope_schema_version": {"const": "ulpf-envelope/1.0.0"},
+    "feature_set": {"$ref": "#/$defs/feature_set"},
+    "selection": {"$ref": "#/$defs/selection"},
+    "revisions": {"$ref": "#/$defs/revisions"},
+    "split": {"$ref": "#/$defs/split"},
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "lineage_fields": {
+      "const": [
+        "receipt_id",
+        "revision_id",
+        "raw_sha256",
+        "pipeline_version",
+        "parser_id",
+        "parser_version",
+        "mapping_version",
+        "schema_version",
+        "quality_score",
+        "issue_codes",
+        "split"
+      ]
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "feature_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "version": {"$ref": "#/$defs/version"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["received_from", "received_to", "statuses"],
+      "properties": {
+        "received_from": {"type": "string", "format": "date-time"},
+        "received_to": {"type": "string", "format": "date-time"},
+        "statuses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["PARSED", "PARTIALLY_PARSED", "UNPARSED", "INVALID", "ERROR"]}
+        }
+      }
+    },
+    "revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "sha256"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "split": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "seed",
+        "train_basis_points",
+        "validation_basis_points",
+        "test_basis_points"
+      ],
+      "properties": {
+        "algorithm": {"const": "sha256_revision_id_v1"},
+        "seed": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\r\\n\\u0000]+$"},
+        "train_basis_points": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "validation_basis_points": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "test_basis_points": {"type": "integer", "minimum": 0, "maximum": 10000}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "path", "sha256", "rows"],
+      "properties": {
+        "format": {"const": "parquet"},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "rows": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

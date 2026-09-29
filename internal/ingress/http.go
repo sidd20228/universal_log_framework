@@ -16,10 +16,13 @@ import (
 )
 
 type HTTPHandlerConfig struct {
-	TenantID        string
-	ListenerID      string
-	SourceProfileID string
-	MaxEventBytes   int64
+	TenantID            string
+	EnvironmentID       string
+	InstanceID          string
+	ListenerID          string
+	SourceProfileID     string
+	SourceProfileByCIDR map[string]string
+	MaxEventBytes       int64
 }
 
 type httpHandler struct {
@@ -74,12 +77,19 @@ func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		writeJSONError(writer, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "event exceeds the configured size limit", requestID)
 		return
 	}
+	peer := requestPeer(request.RemoteAddr)
+	sourceProfileID := handler.config.SourceProfileID
+	if selected := selectSourceProfile(peer, handler.config.SourceProfileByCIDR); selected != "" {
+		sourceProfileID = selected
+	}
 	result, err := handler.admission.Admit(request.Context(), AdmissionRequest{
 		Payload:         request.Body,
 		TenantID:        handler.config.TenantID,
+		EnvironmentID:   handler.config.EnvironmentID,
+		InstanceID:      handler.config.InstanceID,
 		ListenerID:      handler.config.ListenerID,
-		SourceProfileID: handler.config.SourceProfileID,
-		Peer:            requestPeer(request.RemoteAddr),
+		SourceProfileID: sourceProfileID,
+		Peer:            peer,
 		Transport:       model.TransportHTTP,
 		FramingMode:     model.FramingHTTPOctets,
 	})
@@ -92,6 +102,28 @@ func (handler *httpHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		Status:    string(result.Receipt.State),
 		RequestID: requestID,
 	})
+}
+
+// selectSourceProfile applies the most-specific matching network. Equal-length
+// prefixes are impossible after parsing because a map cannot contain duplicate
+// keys, so selection is deterministic and independent of map iteration order.
+func selectSourceProfile(peer *model.Peer, profiles map[string]string) string {
+	if peer == nil || len(profiles) == 0 {
+		return ""
+	}
+	bestBits := -1
+	best := ""
+	for text, profile := range profiles {
+		prefix, err := netip.ParsePrefix(text)
+		if err != nil || !prefix.Contains(peer.IP) {
+			continue
+		}
+		if prefix.Bits() > bestBits {
+			bestBits = prefix.Bits()
+			best = profile
+		}
+	}
+	return best
 }
 
 func (handler *httpHandler) writeAdmissionError(writer http.ResponseWriter, err error, requestID string) {

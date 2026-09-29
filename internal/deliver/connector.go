@@ -18,6 +18,8 @@ type ExportRecord struct {
 	ReceiptID       string
 	RevisionID      string
 	TenantID        string
+	EnvironmentID   string
+	InstanceID      string
 	ReceivedAt      time.Time
 	EventTime       *time.Time
 	SourceProfile   string

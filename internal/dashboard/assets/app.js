@@ -141,7 +141,10 @@
     ui.rawBytes.textContent = formatBytes(totals.raw_bytes ?? totals.preserved_raw_bytes);
     ui.healthMetric.className = health?.ready ? "healthy" : "unhealthy";
     ui.healthMetric.textContent = health ? (health.ready ? "Healthy" : "Not ready") : "—";
-    ui.healthHint.textContent = health ? (health.ready ? "Readiness check passed" : `Readiness returned HTTP ${health.status}`) : "Readiness unavailable";
+    const nodes = Array.isArray(summary?.nodes) ? summary.nodes : [];
+    const availableNodes = nodes.filter((node) => node?.available && !node?.stale).length;
+    const nodeDetail = nodes.length ? ` · ${availableNodes}/${nodes.length} nodes current` : "";
+    ui.healthHint.textContent = health ? (health.ready ? `Readiness check passed${nodeDetail}` : `Readiness returned HTTP ${health.status}${nodeDetail}`) : "Readiness unavailable";
     ui.pipelineDot.className = `status-dot ${health?.ready ? "live" : health ? "error" : "idle"}`;
     ui.pipelineState.textContent = health?.ready ? "Live" : health ? "Unavailable" : "Waiting";
   }
@@ -293,7 +296,8 @@
       row.dataset.revision = event.revision_id || "";
       if (state.selectedRevision === event.revision_id) row.classList.add("selected");
       textCell(row, formatTime(event.received_at));
-      const source = [event.source_profile_id, event.parser_id].filter(Boolean).join(" / ");
+      const origin = [event.environment_id, event.instance_id].filter(Boolean).join(":");
+      const source = [origin, event.source_profile_id, event.parser_id].filter(Boolean).join(" / ");
       textCell(row, source || "Unprofiled");
       const statusCell = document.createElement("td");
       const status = document.createElement("span"); status.className = `status-pill ${eventStatusClass(event.status)}`; status.textContent = event.status || "Unknown";
@@ -347,6 +351,7 @@
     content.append(warning);
     content.append(traceSection("Durable receipt", [
       ["Receipt ID", receipt.id || event.receipt_id], ["Tenant", receipt.tenant_id || event.tenant_id],
+      ["Environment", receipt.environment_id || event.environment_id], ["Instance", receipt.instance_id || event.instance_id],
       ["Received", formatTime(receipt.received_at || event.received_at)], ["Transport", receipt.transport], ["Listener", receipt.listener_id],
     ], receipt.id || event.receipt_id));
     content.append(traceSection("Raw evidence metadata", [

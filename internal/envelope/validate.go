@@ -63,6 +63,14 @@ func validateReceipt(receipt Receipt, raw model.RawReference) error {
 	if receipt.SourceProfileID != "" && !validIdentifier(receipt.SourceProfileID) {
 		problems = append(problems, errors.New("receipt source_profile_id is invalid"))
 	}
+	if (receipt.EnvironmentID == "") != (receipt.InstanceID == "") {
+		problems = append(problems, errors.New("receipt environment_id and instance_id must be supplied together"))
+	}
+	for name, value := range map[string]string{"environment_id": receipt.EnvironmentID, "instance_id": receipt.InstanceID} {
+		if value != "" && !validIdentifier(value) {
+			problems = append(problems, fmt.Errorf("receipt %s is invalid", name))
+		}
+	}
 	if receipt.ReceivedAt.IsZero() {
 		problems = append(problems, errors.New("receipt received_at is required"))
 	}

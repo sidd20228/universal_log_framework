@@ -1,0 +1,26 @@
+{
+  "contract_version": "ulpf-feature-set/1.0.0",
+  "id": "network-risk",
+  "version": "1.0.0",
+  "envelope_schema_version": "ulpf-envelope/1.0.0",
+  "features": [
+    {
+      "name": "action",
+      "type": "string",
+      "source_path": "event.action",
+      "null_policy": "nullable"
+    },
+    {
+      "name": "quality_score",
+      "type": "number",
+      "source_path": "quality.score",
+      "null_policy": "required"
+    },
+    {
+      "name": "source_ip",
+      "type": "ip",
+      "source_path": "event.src_endpoint.ip",
+      "null_policy": "nullable"
+    }
+  ]
+}

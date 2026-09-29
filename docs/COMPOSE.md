@@ -1,8 +1,10 @@
 # One-command Compose deployment
 
-The Compose stack starts the ULPF API and a pinned ClickHouse service. The
-self-contained demo query path reads committed envelopes from bounded SQLite
-pages; `internal/query.ClickHouseReader` remains the production query adapter.
+The Compose stack starts the ULPF API and a pinned ClickHouse service. It mounts
+the strict runtime configuration, initializes the ClickHouse schema, durably
+delivers committed revisions, and uses ClickHouse for tenant-scoped event list
+and trace queries. SQLite remains the receipt, envelope, bundle-lifecycle, and
+connector-queue authority.
 
 Create secrets in your shell and start the stack:
 
@@ -13,9 +15,10 @@ docker compose up --build --wait
 ```
 
 No live secret belongs in the repository or Compose file. For a standalone
-`ulpf serve` process, set `ULPF_API_TOKEN`, set `ULPF_API_TOKEN_FILE`, or pass
-`--token-file` with a mounted secret. Supplying both a file and the environment
-value is rejected. Token contents are never printed.
+`ulpf serve --config` process, reference secrets as `env:NAME` or
+`file:/absolute/path` in the strict runtime file. Legacy flag mode supports
+`ULPF_API_TOKEN`, `ULPF_API_TOKEN_FILE`, or `--token-file`. Conflicting legacy
+sources are rejected, and token contents are never printed.
 
 The public liveness and readiness endpoints are:
 
@@ -48,6 +51,7 @@ ownership setup, with every capability dropped except `CHOWN`, `SETUID`, and
 `SETGID`; its entrypoint then runs the database as UID/GID 101. The health
 check authenticates with the runtime-supplied ClickHouse credentials.
 
-Run `./scripts/test-compose.sh` for the engine-backed smoke check. It exits
-successfully with an explicit skip message when neither a working Docker
-Compose engine nor Podman Compose is available.
+Run `./scripts/test-compose.sh` for the engine-backed admission-to-ClickHouse-
+query smoke check. It exits successfully with an explicit skip message when
+neither a working Docker Compose engine nor Podman Compose is available; a
+release gate must treat that skip as unqualified rather than as runtime proof.

@@ -1,0 +1,28 @@
+{
+  "manifest_version": "ulpf-parser-bundle/1",
+  "bundle_id": "reference-json-firewall",
+  "version": "1.0.0",
+  "description": "Synthetic JSON firewall reference bundle for live normalization tests.",
+  "license": "Apache-2.0",
+  "compatibility": {
+    "envelope_schema": "ulpf-envelope/1.0.0",
+    "minimum_engine_version": "1.0.0",
+    "maximum_engine_version": "1.0.0",
+    "ocsf_version": "1.9.0"
+  },
+  "source": {"kind":"synthetic","reference":"ULPF reference fixtures","product":"reference-json-firewall"},
+  "parsers": [{"id":"reference-json-firewall","implementation":"builtin_json","config":"parser.json","priority":200}],
+  "fingerprints": "fingerprints.json",
+  "mappings": "mappings.json",
+  "taxonomies": "taxonomies.json",
+  "fixtures": {"valid":"fixtures/valid","invalid":"fixtures/invalid","expected":"expected"},
+  "artifacts": [
+    {"path":"parser.json","role":"parser_config","sha256":"5d2dfce6cc2fc11f5bfe2fea6e12c795f023343a6eaa90430aca0adc3ae49782","media_type":"application/json"},
+    {"path":"fingerprints.json","role":"fingerprints","sha256":"58e6a2e86f606f651e4221167d4b97b57b4ffeff10dd381ac08479b0810b0e6b","media_type":"application/json"},
+    {"path":"mappings.json","role":"mappings","sha256":"bcdf58f4049ed66af78dc370867c01815f6ed79b7e3c2a4aeb85576d12cc26d9","media_type":"application/json"},
+    {"path":"taxonomies.json","role":"taxonomies","sha256":"d3734b2d4aeb30efb381569ca6c88fbcb13a4960caec6bd05d91b956e910f32f","media_type":"application/json"},
+    {"path":"fixtures/valid/traffic.json","role":"valid_fixture","sha256":"46fc40122ebc90ea3914c96d0a8ddc3f9be2beb0d41400bbce77204a43889726","media_type":"application/json"},
+    {"path":"fixtures/invalid/unrelated.json","role":"invalid_fixture","sha256":"49029adccca50edce14333cae7efafe1cd0d4575a9bb650a7ed8ebd01da427eb","media_type":"application/json"},
+    {"path":"expected/traffic.json","role":"expected_output","sha256":"9f9fbd61f1e12ec84b5356d34d9ed025339293bb83ee48be8c3a1e455de0c5fd","media_type":"application/json"}
+  ]
+}
